@@ -44,7 +44,15 @@ cd claude-usage
 python main.py
 ```
 
-O painel abre em **http://localhost:8090**.
+Por padrão, o painel sobe em **http://localhost:8090** e abre sozinho no navegador.
+
+Dois detalhes importantes:
+
+- `localhost` é **a sua própria máquina**. Cada pessoa roda a sua instância, com os
+  próprios dados e a própria conta. Não é um endereço público nem compartilhado, e
+  ninguém de fora acessa o seu painel.
+- A porta (`8090`) e o abrir-sozinho são configuráveis em `config.json`
+  (`port` e `open_browser`). Se a porta já estiver em uso, troque por outra.
 
 No Windows você também pode dar dois cliques em `iniciar-painel.bat`.
 
