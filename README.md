@@ -93,6 +93,12 @@ Copie `config.example.json` para `config.json` e ajuste o que quiser:
 - `token.json` guarda o token OAuth da sua conta. Ele está no `.gitignore` e
   **nunca** deve ser compartilhado nem versionado.
 
+## Contribuições
+
+Este é um **projeto pessoal** e **não aceita contribuições externas**. Pull
+requests de terceiros são fechados automaticamente. Fique à vontade para **usar,
+clonar e dar fork** e adaptar para o seu uso.
+
 ## Licença
 
 [MIT](LICENSE) © 2026 Eduardo Campos

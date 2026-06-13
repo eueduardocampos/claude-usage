@@ -1,0 +1,37 @@
+name: Recusar PRs externos
+
+# Projeto pessoal: PRs de qualquer pessoa que nao seja o dono sao fechados
+# automaticamente. So o dono altera o repositorio.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  close-external:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.user.login != github.repository_owner }}
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: "Obrigado pelo interesse! Este e um projeto pessoal e nao " +
+                    "aceita contribuicoes externas, entao este PR sera fechado " +
+                    "automaticamente. Fique a vontade para dar fork e adaptar " +
+                    "para o seu uso. 🙂"
+            });
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              state: "closed"
+            });
