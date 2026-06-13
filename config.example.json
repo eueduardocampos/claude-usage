@@ -1,0 +1,10 @@
+{
+  "port": 8090,
+  "refresh_seconds": 120,
+  "currency": "BRL",
+  "credits_divisor": 100,
+  "intended_hours": 2.0,
+  "daily_days": 30,
+  "callback_port": 54545,
+  "open_browser": true
+}

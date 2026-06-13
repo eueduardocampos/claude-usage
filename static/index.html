@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel de Consumo do Claude</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- BANNER: TOTAL ABSOLUTO DE TOKENS NA VIDA TODA -->
+  <section id="hero" class="hero">
+    <div class="hero-label">Total de tokens · vida toda <span class="live-dot" title="quase em tempo real"></span></div>
+    <div id="heroTotal" class="hero-number">—</div>
+    <div class="hero-sub">
+      <span id="heroCost">—</span> estimado&nbsp; ·&nbsp; <span id="heroTurns">—</span> interações
+    </div>
+  </section>
+
+  <header>
+    <div class="title">
+      <h1>Painel de Consumo do Claude</h1>
+      <div id="status" class="status">conectando…</div>
+    </div>
+    <div class="meta">
+      <span id="updated">—</span>
+      <button id="reconnect" class="btn hidden">Reconectar conta</button>
+      <button id="refreshNow" class="btn">Atualizar agora</button>
+    </div>
+  </header>
+
+  <!-- VEREDITO DE TROCA DE MODELO -->
+  <section id="verdictCard" class="verdict card status-indeterminado">
+    <div class="verdict-left">
+      <div class="verdict-tag">É seguro trocar de modelo?</div>
+      <div id="verdictMsg" class="verdict-msg">Coletando dados…</div>
+      <div id="verdictDetail" class="verdict-detail"></div>
+    </div>
+    <div class="verdict-right">
+      <label>Pretendo trabalhar mais
+        <select id="intendedHours">
+          <option value="0.5">30 min</option>
+          <option value="1">1 h</option>
+          <option value="2">2 h</option>
+          <option value="3">3 h</option>
+          <option value="4">4 h</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <!-- JANELAS / SEMAFORO -->
+  <section id="windows" class="cards"></section>
+
+  <!-- EXTRA USAGE -->
+  <section id="extraRow" class="cards"></section>
+
+  <!-- HISTORICO -->
+  <h2 class="section-title">Histórico de consumo</h2>
+  <section id="history" class="cards"></section>
+
+  <!-- GRAFICOS -->
+  <section class="charts">
+    <div class="card chart-card">
+      <h3>Tokens por dia</h3>
+      <canvas id="chartDaily"></canvas>
+    </div>
+    <div class="card chart-card">
+      <h3>Média por hora do dia</h3>
+      <canvas id="chartHour"></canvas>
+    </div>
+    <div class="card chart-card wide">
+      <h3>Utilização das janelas ao longo do tempo (%)</h3>
+      <canvas id="chartSnap"></canvas>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section class="card config">
+    <h3>Configuração</h3>
+    <label>Atualizar a cada
+      <input type="number" id="refreshSeconds" min="15" step="15"> segundos
+    </label>
+    <button id="saveConfig" class="btn">Salvar</button>
+    <span id="configMsg" class="muted"></span>
+  </section>
+
+  <footer class="muted">
+    Dados locais (logs) + API de uso da sua conta. Uso interno. Os custos em USD
+    são estimativa pela tabela da API; na assinatura o cobrado é o excedente em
+    <span id="curLabel">BRL</span>.
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

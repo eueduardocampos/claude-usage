@@ -1,0 +1,21 @@
+# === SEGREDOS E DADOS LOCAIS — NUNCA VERSIONAR ===
+token.json
+*.db
+painel.db
+
+# Config com ajustes pessoais (use config.example.json como base)
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Sistema operacional / editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
