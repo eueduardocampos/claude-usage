@@ -6,6 +6,7 @@ snapshots; o servidor le sempre o ultimo snapshot do banco (desacoplado da rede)
 
 import datetime as dt
 import json
+import mimetypes
 import os
 import threading
 import time
@@ -19,7 +20,7 @@ import store as store_mod
 import usage_api
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STATIC = os.path.join(HERE, "static")
+WEB_DIST = os.path.join(HERE, "web", "dist")  # build do frontend React/Konsta
 
 WINDOW_HOURS = {"five_hour": 5, "seven_day": 168, "seven_day_sonnet": 168}
 WINDOW_LABELS = {"five_hour": "Sessao (5h)", "seven_day": "Semana (7d)",
@@ -116,7 +117,6 @@ def poll_once(log=print):
 
 
 def poller_loop():
-    poll_once()
     while True:
         time.sleep(max(15, int(Ctx.cfg.get("refresh_seconds", 120))))
         poll_once()
@@ -162,24 +162,29 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _serve_static(self, name, ctype):
-        path = os.path.join(STATIC, name)
-        if not os.path.isfile(path):
-            self._send(404, "not found", "text/plain")
+    def _serve_dist(self, urlpath):
+        """Serve o build do React (web/dist) com fallback SPA para index.html."""
+        rel = urlpath.lstrip("/") or "index.html"
+        full = os.path.normpath(os.path.join(WEB_DIST, rel))
+        if not full.startswith(WEB_DIST):  # protege contra path traversal
+            self._send(403, "forbidden", "text/plain")
             return
-        with open(path, "rb") as f:
+        if not os.path.isfile(full):
+            full = os.path.join(WEB_DIST, "index.html")  # fallback SPA
+        if not os.path.isfile(full):
+            self._send(404, "Build nao encontrado. Rode: npm --prefix web run build",
+                       "text/plain")
+            return
+        ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
+        if ctype.startswith("text") or "javascript" in ctype or "json" in ctype:
+            ctype += "; charset=utf-8"
+        with open(full, "rb") as f:
             self._send(200, f.read(), ctype)
 
     def do_GET(self):
         p = self.path.split("?")[0]
         try:
-            if p in ("/", "/index.html"):
-                self._serve_static("index.html", "text/html; charset=utf-8")
-            elif p == "/app.js":
-                self._serve_static("app.js", "application/javascript; charset=utf-8")
-            elif p == "/style.css":
-                self._serve_static("style.css", "text/css; charset=utf-8")
-            elif p == "/api/state":
+            if p == "/api/state":
                 self._send(200, json.dumps(build_state(), ensure_ascii=False))
             elif p == "/api/total":
                 self._send(200, json.dumps(Ctx.store.total_summary(), ensure_ascii=False))
@@ -194,7 +199,7 @@ class Handler(BaseHTTPRequestHandler):
                 start_login_thread()
                 self._send(200, json.dumps({"started": True}))
             else:
-                self._send(404, "not found", "text/plain")
+                self._serve_dist(p)  # SPA React (web/dist)
         except Exception:
             self._send(500, json.dumps({"error": traceback.format_exc()}))
 
@@ -250,6 +255,7 @@ def run():
     Ctx.store = store_mod.Store(os.path.join(HERE, "painel.db"))
     Ctx.token_store = auth.TokenStore(HERE)
 
+    poll_once()  # poll inicial sincrono: auth_connected ja correto na 1a carga
     threading.Thread(target=poller_loop, daemon=True).start()
     threading.Thread(target=scan_loop, daemon=True).start()
 

@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+@import 'konsta/react/theme.css';
+
+:root {
+  color-scheme: light dark;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* bolinha "ao vivo" do banner */
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(52, 199, 89, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
+}
+.live-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: #34c759;
+  animation: live-pulse 2s infinite;
+}

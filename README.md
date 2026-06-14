@@ -28,13 +28,23 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 - 🤖 **Veredito de troca de modelo** combinando limite ao vivo + ritmo dos logs.
 - 📊 Gráficos de tokens por dia, perfil por hora do dia e evolução das janelas.
 - ⏱️ Intervalo de atualização configurável.
+- 🍎 **Interface Cupertino (iOS)** feita com [Konsta UI](https://konstaui.com) + Tailwind CSS v4.
 - 🔒 Roda 100% local; nenhum dado sai da sua máquina.
+
+## Stack
+
+- **Frontend:** React + Vite + Konsta UI (tema iOS) + Tailwind CSS v4 + Chart.js. Componentes documentados no **Storybook**.
+- **Backend:** Python (só biblioteca padrão) — serve o build do frontend e expõe a API de estado/uso.
 
 ## Requisitos
 
-- **Python 3.8+** (só biblioteca padrão; nenhuma dependência para instalar).
+Para **rodar** (a interface já vem compilada em `web/dist`):
+
+- **Python 3.8+** (só biblioteca padrão).
 - **Claude Code** já autenticado na máquina (CLI ou app).
-- Conexão com internet (para a API de uso e o Chart.js via CDN).
+- Conexão com internet (para a API de uso da conta).
+
+Para **desenvolver a interface** (opcional): **Node.js 18+**.
 
 ## Instalação
 
@@ -55,6 +65,23 @@ Dois detalhes importantes:
   (`port` e `open_browser`). Se a porta já estiver em uso, troque por outra.
 
 No Windows você também pode dar dois cliques em `iniciar-painel.bat`.
+
+## Desenvolvimento da interface
+
+A interface fica em `web/` (React + Vite + Konsta UI). O build versionado em
+`web/dist` é o que o `python main.py` serve — por isso quem só quer **usar** não
+precisa de Node. Para **mexer na interface**:
+
+```bash
+cd web
+npm install
+npm run dev          # Vite em http://localhost:5173 (com a API do Python via proxy)
+npm run build        # regera web/dist (rode antes de commitar mudanças de UI)
+npm run storybook    # Storybook dos componentes em http://localhost:6006
+```
+
+No `npm run dev`, deixe o backend rodando em paralelo (`python main.py`) para a
+API responder.
 
 ## Autenticação
 
