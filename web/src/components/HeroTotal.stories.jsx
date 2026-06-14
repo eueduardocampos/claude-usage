@@ -1,7 +1,7 @@
 import HeroTotal from './HeroTotal';
 
 export default {
-  title: 'Cupertino/HeroTotal',
+  title: 'Painel/HeroTotal',
   component: HeroTotal,
   parameters: { layout: 'fullscreen' },
 };

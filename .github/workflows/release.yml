@@ -1,7 +1,7 @@
 name: Publicar release
 
-# Dispara quando uma tag v* e enviada e cria o release automaticamente,
-# usando o GITHUB_TOKEN nativo do Actions (nao precisa de token pessoal).
+# Dispara quando uma tag v* e enviada e cria (ou recria) o release
+# automaticamente, usando o GITHUB_TOKEN nativo do Actions.
 
 on:
   push:
@@ -22,10 +22,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          gh release delete "${{ github.ref_name }}" --yes || true
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }} — Painel de Consumo do Claude" \
             --notes "$(cat <<'EOF'
-          Painel local de consumo do Claude Code com **interface Cupertino (iOS)**.
+          ![Painel de Consumo do Claude](https://raw.githubusercontent.com/eueduardocampos/claude-usage/main/docs/painel.png)
+
+          Painel local de consumo do Claude Code com **interface no estilo iOS**.
 
           Mostra o total de tokens da vida toda, médias por hora (geral/mês/semana/dia),
           os limites ao vivo da conta (sessão 5h, semana 7d, Sonnet 7d) com semáforo de
@@ -33,7 +36,7 @@ jobs:
 
           - Frontend: React + Vite + Konsta UI (tema iOS) + Tailwind v4 + Chart.js
           - Backend: Python (stdlib) servindo o build + API de uso da conta
-          - Roda em localhost; para usar basta `python main.py` (a UI já vem compilada)
+          - Roda em localhost; para usar basta `python main.py` (a interface já vem compilada)
 
           Instalação e detalhes no [README](https://github.com/eueduardocampos/claude-usage#readme).
 

@@ -1,7 +1,7 @@
 import WindowCard from './WindowCard';
 
 export default {
-  title: 'Cupertino/WindowCard',
+  title: 'Painel/WindowCard',
   component: WindowCard,
 };
 

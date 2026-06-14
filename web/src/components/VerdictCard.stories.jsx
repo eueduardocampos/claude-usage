@@ -1,7 +1,7 @@
 import VerdictCard from './VerdictCard';
 
 export default {
-  title: 'Cupertino/VerdictCard',
+  title: 'Painel/VerdictCard',
   component: VerdictCard,
 };
 

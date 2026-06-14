@@ -18,7 +18,7 @@ const preview = {
       ],
     },
   },
-  // todos os componentes Cupertino vivem dentro do provider Konsta (tema iOS)
+  // todos os componentes vivem dentro do provider Konsta (tema iOS)
   decorators: [
     (Story) => (
       <Konsta theme="ios">

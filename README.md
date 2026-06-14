@@ -4,6 +4,8 @@ Um painel local que mostra, em um só lugar, **quanto você já consumiu** no Cl
 Code e **se é seguro continuar / trocar de modelo agora** — ou se você corre o
 risco de bater o limite no meio de um projeto.
 
+![Painel de Consumo do Claude](docs/painel.png)
+
 Ele junta duas fontes:
 
 1. **Seus logs locais** (`~/.claude/projects`) → total de tokens da vida toda,
@@ -28,7 +30,7 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 - 🤖 **Veredito de troca de modelo** combinando limite ao vivo + ritmo dos logs.
 - 📊 Gráficos de tokens por dia, perfil por hora do dia e evolução das janelas.
 - ⏱️ Intervalo de atualização configurável.
-- 🍎 **Interface Cupertino (iOS)** feita com [Konsta UI](https://konstaui.com) + Tailwind CSS v4.
+- 🍎 **Interface no estilo iOS** feita com [Konsta UI](https://konstaui.com) + Tailwind CSS v4.
 - 🔒 Roda 100% local; nenhum dado sai da sua máquina.
 
 ## Stack
