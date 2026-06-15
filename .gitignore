@@ -19,3 +19,4 @@ env/
 Thumbs.db
 .idea/
 .vscode/
+dist-release/
