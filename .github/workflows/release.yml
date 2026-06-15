@@ -1,45 +1,82 @@
 name: Publicar release
 
-# Dispara quando uma tag v* e enviada e cria (ou recria) o release
-# automaticamente, usando o GITHUB_TOKEN nativo do Actions.
+# Dispara quando uma tag v* e enviada. Builda o app de desktop (Tauri) para
+# macOS (universal), Windows e Linux em runners nativos e anexa os instaladores
+# ao release como rascunho. Roda em paralelo (matriz); cada job sobe seus
+# artefatos no mesmo release.
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  publish-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+            rust-targets: ''
+          - platform: windows-latest
+            args: ''
+            rust-targets: ''
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Criar release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Instalar dependencias do sistema (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
-          gh release delete "${{ github.ref_name }}" --yes || true
-          gh release create "${{ github.ref_name }}" \
-            --title "${{ github.ref_name }} — Painel de Consumo do Claude" \
-            --notes "$(cat <<'EOF'
-          ![Painel de Consumo do Claude](https://raw.githubusercontent.com/eueduardocampos/claude-usage/main/docs/painel.png)
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential curl wget file \
+            libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev patchelf
 
-          Painel local de consumo do Claude Code com **interface no estilo iOS**.
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
 
-          Mostra o total de tokens da vida toda, médias por hora (geral/mês/semana/dia),
-          os limites ao vivo da conta (sessão 5h, semana 7d, Sonnet 7d) com semáforo de
-          risco e projeção até o reset, e um veredito direto de **troca de modelo**.
+      - name: Cache do Cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './desktop/src-tauri -> target'
 
-          - Frontend: React + Vite + Konsta UI (tema iOS) + Tailwind v4 + Chart.js
-          - Backend: Python (stdlib) servindo o build + API de uso da conta
-          - Roda em localhost; para usar basta `python main.py` (a interface já vem compilada)
+      - name: Build + anexar ao release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: '${{ github.ref_name }} — Consumo do Claude (desktop)'
+          releaseBody: |
+            Widget flutuante de consumo do Claude para **macOS, Windows e Linux**.
 
-          Instalação e detalhes no [README](https://github.com/eueduardocampos/claude-usage#readme).
+            O app e a moldura nativa: ele exibe o painel servido em `localhost:8090`,
+            entao o painel (`python main.py`) precisa estar rodando. Instalacao e
+            detalhes por sistema no [README](https://github.com/eueduardocampos/claude-usage#readme).
 
-          Projeto pessoal e não-oficial — sem relação com a Anthropic.
-          EOF
-          )"
+            Baixe o instalador do seu sistema abaixo:
+            - **macOS**: `.dmg` (universal — Intel e Apple Silicon)
+            - **Windows**: `.msi` ou `.exe`
+            - **Linux**: `.AppImage`, `.deb` ou `.rpm`
+
+            Apps nao assinados: na primeira execucao pode ser necessario liberar no
+            Gatekeeper (macOS, botao direito > Abrir) ou no SmartScreen (Windows).
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

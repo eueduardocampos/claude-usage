@@ -4,6 +4,9 @@ use tauri::{
     Manager,
 };
 
+#[cfg(target_os = "windows")]
+use window_vibrancy::apply_mica;
+
 fn toggle_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         if w.is_visible().unwrap_or(false) {
@@ -28,8 +31,15 @@ pub fn run() {
                 )?;
             }
 
-            // Janela transparente: o "vidro" é feito em CSS (backdrop-filter sobre o
-            // desktop), o que dá um regulador de transparência ajustável no widget.
+            // Janela transparente: no macOS o "vidro" vem do backdrop-filter (CSS)
+            // sobre o desktop. No Windows aplicamos Mica nativo (Win11); no Linux
+            // fica o tint translúcido do CSS, sem blur (não há material universal).
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = apply_mica(&w, Some(true)); // variante escura
+                }
+            }
 
             // ---- Ícone na barra de menu ----
             let toggle_i = MenuItem::with_id(app, "toggle", "Mostrar / Ocultar", true, None::<&str>)?;

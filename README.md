@@ -31,14 +31,14 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 - 📊 Gráficos de tokens por dia, perfil por hora do dia e evolução das janelas.
 - ⏱️ Intervalo de atualização configurável.
 - 🍎 **Interface no estilo iOS** feita com [Konsta UI](https://konstaui.com) + Tailwind CSS v4.
-- 🪟 **Widget flutuante nativo para macOS** (Liquid Glass, sempre no topo) — veja [App de desktop](#app-de-desktop-macos).
+- 🪟 **Widget flutuante nativo** para macOS, Windows e Linux (sempre no topo) — veja [App de desktop](#app-de-desktop-macos-windows-e-linux).
 - 🔒 Roda 100% local; nenhum dado sai da sua máquina.
 
 ## Stack
 
 - **Frontend:** React + Vite + Konsta UI (tema iOS) + Tailwind CSS v4 + Chart.js. Componentes documentados no **Storybook**.
 - **Backend:** Python (só biblioteca padrão) — serve o build do frontend e expõe a API de estado/uso.
-- **App de desktop (macOS):** [Tauri](https://tauri.app) (Rust) — janela flutuante nativa que exibe o widget. Veja a seção [App de desktop](#app-de-desktop-macos).
+- **App de desktop (macOS/Windows/Linux):** [Tauri](https://tauri.app) (Rust) — janela flutuante nativa que exibe o widget. Veja a seção [App de desktop](#app-de-desktop-macos-windows-e-linux).
 
 ## Requisitos
 
@@ -70,40 +70,45 @@ Dois detalhes importantes:
 
 No Windows você também pode dar dois cliques em `iniciar-painel.bat`.
 
-## App de desktop (macOS)
+## App de desktop (macOS, Windows e Linux)
 
-Além do painel completo no navegador, existe um **widget flutuante nativo para
-macOS** — uma janelinha sempre visível, no estilo dos widgets do sistema, que
-mostra o essencial em tempo real e fica por cima das outras janelas enquanto você
-trabalha.
+Além do painel completo no navegador, existe um **widget flutuante nativo** — uma
+janelinha sempre visível, no estilo dos widgets do sistema, que mostra o essencial
+em tempo real e fica por cima das outras janelas enquanto você trabalha. Tem build
+para **macOS, Windows e Linux**.
 
-![Widget de desktop no macOS](docs/widget-mac.png)
+![Widget de desktop](docs/widget-mac.png)
 
 O que ele traz:
 
 - **Janela flutuante** sem barra de título, que você arrasta e fixa em qualquer
   lugar da tela.
-- **Liquid Glass** — fundo de vidro translúcido com o desktop transparecendo por
-  baixo, e um **regulador de transparência** (passe o mouse sobre o widget e use
-  o controle deslizante).
+- **Vidro translúcido** com um **regulador de transparência** (passe o mouse sobre
+  o widget e use o controle deslizante). No macOS o desktop aparece borrado por
+  baixo (Liquid Glass); no Windows usa Mica nativo; no Linux fica translúcido sem
+  o blur.
 - **Sempre no topo**, com atualização a cada 5s.
 - **Anel principal da janela de 5h** (a que realmente trava o uso), anéis menores
   para o semanal e o Sonnet, modelo mais usado na sessão, quando a janela
   reinicia e o total de tokens dígito a dígito.
-- **Ícone na barra de menu**: clique para mostrar/ocultar, alternar "sempre no
-  topo" ou sair.
+- **Ícone na bandeja/barra de menu**: clique para mostrar/ocultar, alternar
+  "sempre no topo" ou sair.
 
 > O app de desktop é só a "moldura" nativa: ele exibe o widget servido pelo
 > backend em `localhost:8090`. **O painel (`python main.py`) precisa estar
-> rodando** para o app mostrar dados.
+> rodando** para o app mostrar dados — vale para os três sistemas.
 
 ### Instalar pelo release (sem ferramentas de build)
 
 1. Deixe o painel rodando: `python main.py`.
-2. Baixe o `.dmg` mais recente na [página de releases](https://github.com/eueduardocampos/claude-usage/releases),
-   abra e arraste o app para a pasta Aplicativos.
-3. Na primeira vez, como o app não é assinado pela Apple, clique nele com o botão
-   direito → **Abrir** (em vez de duplo clique) para liberar no Gatekeeper.
+2. Baixe o instalador do seu sistema na [página de releases](https://github.com/eueduardocampos/claude-usage/releases):
+   - **macOS:** `.dmg` (universal — Intel e Apple Silicon). Abra e arraste o app
+     para Aplicativos. Na primeira vez, clique com o botão direito → **Abrir**
+     (o app não é assinado pela Apple).
+   - **Windows:** `.msi` ou `.exe`. Se o SmartScreen avisar, clique em **Mais
+     informações → Executar assim mesmo**.
+   - **Linux:** `.AppImage` (dê permissão de execução e rode), `.deb` (Debian/
+     Ubuntu) ou `.rpm` (Fedora/openSUSE).
 
 ### Rodar a partir do código
 
@@ -111,11 +116,22 @@ Precisa do [Rust](https://rustup.rs) instalado (`rustup`). Com o painel rodando:
 
 ```bash
 cd desktop
-cargo tauri dev      # abre o widget em modo desenvolvimento
-cargo tauri build    # gera o .app/.dmg em src-tauri/target/release/bundle
+npx @tauri-apps/cli dev      # abre o widget em modo desenvolvimento
+npx @tauri-apps/cli build    # gera o instalador em src-tauri/target/release/bundle
 ```
 
-Se você não tem o `cargo tauri`, use `npx @tauri-apps/cli dev` / `... build`.
+Os releases multiplataforma são gerados automaticamente pelo GitHub Actions
+(`.github/workflows/release.yml`) a cada tag `v*`, em runners nativos de cada
+sistema.
+
+### Ícone do app
+
+O ícone atual é um placeholder. Para trocar pela arte definitiva, coloque um PNG
+quadrado (≥ 1024px) e rode, dentro de `desktop/`:
+
+```bash
+npx @tauri-apps/cli icon caminho/para/arte.png
+```
 
 ### iOS
 
