@@ -223,6 +223,118 @@ export default function Widget() {
     </div>
   ) : null;
 
+  // Abre o painel completo no navegador do sistema (Tauri opener) ou nova aba.
+  const openDashboard = (e) => {
+    e.stopPropagation();
+    const url = window.location.origin + '/';
+    try {
+      if (window.__TAURI__?.opener?.openUrl) {
+        window.__TAURI__.opener.openUrl(url);
+        return;
+      }
+    } catch { /* cai pro fallback */ }
+    window.open(url, '_blank', 'noopener');
+  };
+  const openBtn = (
+    <button
+      type="button"
+      className="widget-open"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={openDashboard}
+      title="Abrir painel completo"
+    >
+      Painel ↗
+    </button>
+  );
+
+  // ---- Controles de janela (modo nativo): compacto / minimizar / fechar ----
+  const SIZE_NORMAL = { w: 504, h: 268 };
+  const SIZE_COMPACT = { w: 300, h: 116 };
+  const tauriWin = (typeof window !== 'undefined') ? window.__TAURI__?.window : null;
+  const getWin = useCallback(() => {
+    try { return tauriWin?.getCurrentWindow?.() ?? null; } catch { return null; }
+  }, [tauriWin]);
+
+  const [compact, setCompact] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('widgetCompact') === '1';
+  });
+
+  useEffect(() => {
+    if (!isNative) return;
+    try { window.localStorage.setItem('widgetCompact', compact ? '1' : '0'); } catch { /* */ }
+    const w = getWin();
+    if (w && tauriWin?.LogicalSize) {
+      const s = compact ? SIZE_COMPACT : SIZE_NORMAL;
+      try { w.setSize(new tauriWin.LogicalSize(s.w, s.h)); } catch { /* */ }
+    }
+  }, [compact, isNative, getWin, tauriWin, SIZE_COMPACT.w, SIZE_COMPACT.h, SIZE_NORMAL.w, SIZE_NORMAL.h]);
+
+  const windowControls = isNative ? (
+    <div className="widget-winctl" onMouseDown={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="widget-winctl-btn"
+        onClick={(e) => { e.stopPropagation(); setCompact((c) => !c); }}
+        title={compact ? 'Expandir' : 'Versão compacta'}
+      >
+        {compact ? '⤢' : '⤡'}
+      </button>
+      <button
+        type="button"
+        className="widget-winctl-btn"
+        onClick={(e) => { e.stopPropagation(); getWin()?.minimize?.(); }}
+        title="Minimizar"
+      >
+        –
+      </button>
+      <button
+        type="button"
+        className="widget-winctl-btn widget-winctl-close"
+        onClick={(e) => { e.stopPropagation(); getWin()?.hide?.(); }}
+        title="Fechar (reabre pelo ícone na barra de menu)"
+      >
+        ×
+      </button>
+    </div>
+  ) : null;
+
+  // Métrica correta: total = tokens processados (input+output+cache, o volume real).
+  const processed = total?.total_tokens;
+  const outTok = total?.output_tokens;
+  const cacheTok = (total?.cache_read || 0) + (total?.cache_creation || 0);
+  // Decomposição absoluta do volume processado (mais claro que %, que arredonda a 100).
+  const composition = total
+    ? `saída ${fmtTokens(outTok)} · cache ${fmtTokens(cacheTok)}`
+    : null;
+
+  // Versão compacta (modo nativo): só os contadores das janelas, alinhados.
+  if (isNative && compact) {
+    return (
+      <div className="widget-shell">
+        <div className="widget-card widget-card-compact" {...dragProps}>
+          <div className="widget-compact-row">
+            {WINDOWS.map(({ key, short }) => {
+              const w = state?.windows?.[key];
+              return (
+                <div key={key} className="widget-compact-item">
+                  <Ring size={44} stroke={5} value={w?.utilization} status={w?.status}>
+                    <span className="widget-compact-pct">
+                      {w?.utilization == null ? '—' : Math.round(w.utilization) + '%'}
+                    </span>
+                  </Ring>
+                  <span className="widget-compact-label">{short}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="widget-winctl-corner">{windowControls}</div>
+          {glassControl}
+        </div>
+      </div>
+    );
+  }
+
   if (isHorizontal) {
     return (
       <div className="widget-shell">
@@ -232,9 +344,13 @@ export default function Widget() {
               <span className={`widget-live ${fresh ? 'is-fresh' : ''}`} />
               <span className="widget-eyebrow">Claude · ao vivo</span>
             </div>
-            <span className="widget-clock" title="Última atualização">
-              {fmtClock(lastUpdate.current)}
-            </span>
+            <div className="widget-row widget-gap-2">
+              {openBtn}
+              {windowControls}
+              <span className="widget-clock" title="Última atualização">
+                {fmtClock(lastUpdate.current)}
+              </span>
+            </div>
           </div>
 
           <div className="widget-h-body">
@@ -291,8 +407,11 @@ export default function Widget() {
           </div>
 
           <div className="widget-total-strip">
-            <span className="widget-total-label">Total de tokens</span>
-            <span className="widget-total-count">{fmtInt(total?.total_tokens)}</span>
+            <div className="widget-total-meta">
+              <span className="widget-total-label">Tokens processados</span>
+              {composition && <span className="widget-total-sub">{composition}</span>}
+            </div>
+            <span className="widget-total-count">{fmtInt(processed)}</span>
           </div>
           {glassControl}
         </div>
@@ -308,9 +427,13 @@ export default function Widget() {
             <span className={`widget-live ${fresh ? 'is-fresh' : ''}`} />
             <span className="widget-eyebrow">Claude · ao vivo</span>
           </div>
-          <span className="widget-clock" title="Última atualização">
-            {fmtClock(lastUpdate.current)}
-          </span>
+          <div className="widget-row widget-gap-2">
+            {openBtn}
+            {windowControls}
+            <span className="widget-clock" title="Última atualização">
+              {fmtClock(lastUpdate.current)}
+            </span>
+          </div>
         </div>
 
         <div className="widget-hero">
@@ -372,8 +495,9 @@ export default function Widget() {
 
         <div className="widget-footer">
           <div>
-            <div className="widget-footer-label">Total de tokens</div>
-            <div className="widget-footer-value widget-total-count">{fmtInt(total?.total_tokens)}</div>
+            <div className="widget-footer-label">Tokens processados</div>
+            <div className="widget-footer-value widget-total-count">{fmtInt(processed)}</div>
+            {composition && <div className="widget-total-sub">{composition}</div>}
           </div>
           <div className="widget-footer-right">
             <div className="widget-footer-label">Reinicia em</div>

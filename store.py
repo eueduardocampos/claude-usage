@@ -222,12 +222,22 @@ class Store:
             SUM(cache_read) cr, SUM(cache_creation) cc, COUNT(*) t
             FROM turns GROUP BY model""").fetchall()
         tokens = cost = turns = 0
+        t_in = t_out = t_cr = t_cc = 0
         for r in rows:
             i, o, cr, cc = r["i"] or 0, r["o"] or 0, r["cr"] or 0, r["cc"] or 0
             tokens += i + o + cr + cc
             cost += row_cost(r["model"], i, o, cr, cc)
             turns += r["t"]
-        return {"total_tokens": tokens, "total_cost": cost, "total_turns": turns}
+            t_in += i; t_out += o; t_cr += cr; t_cc += cc
+        return {
+            "total_tokens": tokens,      # processados: input+output+cache (volume real)
+            "total_cost": cost,
+            "total_turns": turns,
+            "input_tokens": t_in,
+            "output_tokens": t_out,
+            "cache_read": t_cr,
+            "cache_creation": t_cc,
+        }
 
     @_locked
     def daily_series(self, days: int = 30):
