@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { api } from './api';
 import { fmtTokens, fmtInt, statusKey } from './format';
 
@@ -192,7 +193,22 @@ export default function Widget() {
   }, []);
 
   // Em modo nativo (Tauri), a janela inteira é arrastável.
-  const dragProps = isNative ? { 'data-tauri-drag-region': '' } : {};
+  // `data-tauri-drag-region` só arrasta quando o clique cai no próprio
+  // elemento que tem o atributo — não nos filhos. Como o card fica quase
+  // todo coberto por anéis/textos, o clique quase nunca cai no elemento
+  // "vazio", e a janela parecia impossível de mover. Chamando
+  // startDragging() explicitamente no mousedown (que borbulha por cima dos
+  // filhos, exceto onde a régua de transparência já corta com
+  // stopPropagation) o arraste funciona a partir de qualquer ponto do card.
+  const dragProps = isNative
+    ? {
+        'data-tauri-drag-region': '',
+        onMouseDown: (e) => {
+          if (e.button !== 0) return;
+          getCurrentWindow().startDragging().catch(() => {});
+        },
+      }
+    : {};
 
   // Regulador de transparência (modo nativo): controla o alpha do vidro CSS.
   const [glassAlpha, setGlassAlpha] = useState(() => {

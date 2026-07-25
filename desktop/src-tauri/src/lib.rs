@@ -18,6 +18,47 @@ fn toggle_main(app: &tauri::AppHandle) {
     }
 }
 
+// tauri-plugin-window-state restaura a última posição salva sem checar se ela
+// ainda cai dentro de algum monitor conectado agora. Quem já usou um monitor
+// externo (ou trocou de máquina levando o estado salvo, como neste projeto que
+// vive numa pasta de Drive compartilhado) acaba com a janela "aberta" fora de
+// qualquer tela — ela existe, mas não há como vê-la nem arrastá-la de volta,
+// já que a janela não tem barra de título (decorations: false). Por isso, logo
+// depois que a janela é criada/restaurada, confirmamos que ela realmente
+// sobrepõe algum monitor disponível; se não sobrepõe nenhum, recentralizamos.
+fn ensure_window_on_screen(window: &tauri::WebviewWindow) {
+    let Ok(monitors) = window.available_monitors() else {
+        log::warn!("ensure_window_on_screen: available_monitors() falhou");
+        return;
+    };
+    let Ok(pos) = window.outer_position() else {
+        log::warn!("ensure_window_on_screen: outer_position() falhou");
+        return;
+    };
+    let Ok(size) = window.outer_size() else {
+        log::warn!("ensure_window_on_screen: outer_size() falhou");
+        return;
+    };
+
+    let on_screen = monitors.iter().any(|m| {
+        let mpos = m.position();
+        let msize = m.size();
+        pos.x < mpos.x + msize.width as i32
+            && pos.x + size.width as i32 > mpos.x
+            && pos.y < mpos.y + msize.height as i32
+            && pos.y + size.height as i32 > mpos.y
+    });
+
+    log::info!(
+        "ensure_window_on_screen: pos=({},{}) size=({},{}) monitors={} on_screen={}",
+        pos.x, pos.y, size.width, size.height, monitors.len(), on_screen
+    );
+
+    if !on_screen {
+        let _ = window.center();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -40,6 +81,19 @@ pub fn run() {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = apply_mica(&w, Some(true)); // variante escura
                 }
+            }
+
+            if let Some(w) = app.get_webview_window("main") {
+                ensure_window_on_screen(&w);
+                // tauri-plugin-window-state pode aplicar a posicao salva
+                // depois deste setup() (ordem de inicializacao nao garantida
+                // entre plugins e o hook do usuario) -- reconfere pouco depois
+                // pra pegar o caso em que a restauracao acontece por ultimo.
+                let w2 = w.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                    ensure_window_on_screen(&w2);
+                });
             }
 
             // ---- Ícone na barra de menu ----

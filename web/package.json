@@ -12,6 +12,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
     "chart.js": "^4.5.1",
     "konsta": "^5.1.0",
     "react": "^19.2.6",
@@ -19,29 +20,29 @@
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@chromatic-com/storybook": "^5.2.1",
     "@eslint/js": "^10.0.1",
+    "@storybook/addon-a11y": "^10.4.4",
+    "@storybook/addon-docs": "^10.4.4",
+    "@storybook/addon-mcp": "^0.6.0",
+    "@storybook/addon-vitest": "^10.4.4",
+    "@storybook/react-vite": "^10.4.4",
     "@tailwindcss/vite": "^4.3.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/browser-playwright": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-storybook": "^10.4.4",
     "globals": "^17.6.0",
+    "playwright": "^1.60.0",
+    "prop-types": "^15.8.1",
+    "storybook": "^10.4.4",
     "tailwindcss": "^4.3.1",
     "vite": "^8.0.12",
-    "storybook": "^10.4.4",
-    "@storybook/react-vite": "^10.4.4",
-    "@chromatic-com/storybook": "^5.2.1",
-    "@storybook/addon-vitest": "^10.4.4",
-    "@storybook/addon-a11y": "^10.4.4",
-    "@storybook/addon-docs": "^10.4.4",
-    "@storybook/addon-mcp": "^0.6.0",
-    "prop-types": "^15.8.1",
-    "eslint-plugin-storybook": "^10.4.4",
-    "vitest": "^4.1.8",
-    "playwright": "^1.60.0",
-    "@vitest/browser-playwright": "^4.1.8",
-    "@vitest/coverage-v8": "^4.1.8"
+    "vitest": "^4.1.8"
   }
 }

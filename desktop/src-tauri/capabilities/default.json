@@ -5,6 +5,11 @@
   "windows": [
     "main"
   ],
+  "remote": {
+    "urls": [
+      "http://localhost:8090/*"
+    ]
+  },
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
