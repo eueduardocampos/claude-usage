@@ -45,14 +45,14 @@ class Ctx:
     rate_limited = False   # 429 em curso (transitorio, NAO e desconexao)
     rate_limit_hits = 0    # 429s seguidos — alimenta o backoff exponencial
     next_poll_at = 0.0     # timestamp do proximo poll permitido
+    boot_retries = 0       # falhas antes da PRIMEIRA leitura boa (pos-boot)
 
 
 # Ritmo do poll da API de uso. NAO e configuravel de proposito: o limite de
 # requisicoes e da CONTA INTEIRA (cada sessao aberta do Claude Code soma no
-# mesmo balde), entao um intervalo curto aqui derruba o painel sem ganhar
-# nada — as janelas de uso se movem devagar, e o contador de tokens ja
-# atualiza a cada 10s pelo scan dos logs locais, que nao gasta requisicao.
-# Ritmo adaptativo: o numero so precisa estar fresco quando muda decisao.
+# mesmo balde), entao deixar o usuario baixar o intervalo so derruba o painel.
+#
+# Ele e adaptativo porque o numero so precisa estar fresco quando muda decisao.
 # Perto do teto ele anda ~1 ponto/min em uso pesado, entao 5 min de defasagem
 # viram 5 pontos de erro — exatamente na hora de decidir se continua. Com folga,
 # a mesma defasagem nao muda nada e o que importa e poupar requisicao.
@@ -225,6 +225,19 @@ def detect_plan(profile):
     return None
 
 
+def _retry_after_falha():
+    """Quanto esperar depois de uma falha que NAO e rate limit.
+
+    Enquanto nunca houve uma leitura boa, a causa provavel e ambiente (rede ou
+    disco ainda subindo depois do boot), nao credencial morta — entao tenta de
+    novo rapido, dobrando ate o ritmo normal. Se a credencial estiver mesmo
+    morta, converge para 5 min em vez de martelar."""
+    if Ctx.last_poll is None:
+        Ctx.boot_retries += 1
+        return min(POLL_COLD, 15 * (2 ** (Ctx.boot_retries - 1)))
+    return POLL_COLD
+
+
 def _poll_interval():
     """Escolhe o ritmo pelo pico de utilizacao do ultimo snapshot."""
     try:
@@ -276,6 +289,7 @@ def poll_once(log=print):
             Ctx.rate_limit_hits = 0
             Ctx.last_error = None
             Ctx.last_poll = time.time()
+            Ctx.boot_retries = 0
             Ctx.next_poll_at = time.time() + _poll_interval()
         except usage_api.RateLimited as e:
             # transitorio: preserva auth_connected e o ultimo snapshot bom
@@ -293,12 +307,12 @@ def poll_once(log=print):
             Ctx.auth_connected = False
             Ctx.rate_limited = False
             Ctx.last_error = f"auth: {e}"
-            Ctx.next_poll_at = time.time() + POLL_SECONDS
+            Ctx.next_poll_at = time.time() + _retry_after_falha()
             log(f"[poll] sem token valido: {e}")
         except Exception as e:
             # rede/servidor: nao mexe em auth_connected, so tenta mais tarde
             Ctx.last_error = str(e)
-            Ctx.next_poll_at = time.time() + POLL_SECONDS
+            Ctx.next_poll_at = time.time() + _retry_after_falha()
             log(f"[poll] erro: {e}")
     finally:
         _poll_lock.release()

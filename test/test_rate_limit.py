@@ -59,6 +59,25 @@ usage_api.fetch_usage = lambda store, log=print: (_ for _ in ()).throw(auth.Tran
 server.poll_once(log=lambda *a: None)
 check(server.Ctx.auth_connected is True, "429 no refresh do token nao desconecta")
 
+# --- falha no boot: recupera rapido em vez de esperar o ritmo normal ---
+# (rede ou disco ainda subindo depois de reiniciar a maquina)
+server.Ctx.last_poll = None
+server.Ctx.boot_retries = 0
+server.Ctx.store.latest_state = lambda self=None: None
+usage_api.fetch_usage = lambda store, log=print: (_ for _ in ()).throw(auth.AuthError("sem token"))
+esperas_boot = []
+for _ in range(6):
+    server.poll_once(log=lambda *a: None)
+    esperas_boot.append(round(server.Ctx.next_poll_at - time.time()))
+check(esperas_boot[0] <= 15, f"falha no boot: 1a retentativa rapida ({esperas_boot[0]}s)")
+check(esperas_boot == sorted(esperas_boot), f"espera cresce se persistir: {esperas_boot}s")
+check(esperas_boot[-1] <= server.POLL_COLD, "converge para o ritmo normal (nao martela)")
+
+usage_api.fetch_usage = lambda store, log=print: {}
+usage_api.normalize = lambda raw: {"windows": {}, "extra_usage": None}
+server.poll_once(log=lambda *a: None)
+check(server.Ctx.boot_retries == 0, "sucesso zera o contador de boot")
+
 print()
 print(("%d FALHA(S)" % len(falhas)) if falhas else "TUDO PASSOU")
 sys.exit(1 if falhas else 0)
