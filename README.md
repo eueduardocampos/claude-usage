@@ -31,7 +31,7 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 - 🔮 **Projeção até o reset** com base no ritmo medido de consumo.
 - 🤖 **Veredito de troca de modelo** combinando limite ao vivo + ritmo dos logs.
 - 📊 Gráficos de tokens por dia, perfil por hora do dia e evolução das janelas.
-- ⏱️ Intervalo de atualização configurável.
+- ⏱️ **Ritmo seguro por padrão**: poll da API a cada 5 min com backoff em `429`, sem tratar limite de requisição como desconexão.
 - 🍎 **Interface no estilo iOS** feita com [Konsta UI](https://konstaui.com) + Tailwind CSS v4.
 - 🪟 **Widget flutuante nativo** para macOS, Windows e Linux (sempre no topo) — veja [App de desktop](#app-de-desktop-macos-windows-e-linux).
 - 🔒 Roda 100% local; nenhum dado sai da sua máquina.
@@ -196,11 +196,28 @@ Copie `config.example.json` para `config.json` e ajuste o que quiser:
 | Campo | Descrição |
 |---|---|
 | `port` | Porta do painel (padrão 8090) |
-| `refresh_seconds` | Intervalo de atualização da API |
+| ~~`refresh_seconds`~~ | Não é mais configurável: o poll da API é fixo em 5 min (veja abaixo) |
 | `currency` | Moeda do excedente (ex.: `BRL`, `USD`) |
 | `credits_divisor` | Divisor dos créditos (a API costuma vir em centavos → 100) |
 | `intended_hours` | Horizonte padrão do veredito de troca |
 | `callback_port` | Porta do callback do login OAuth |
+
+## Por que o intervalo da API é fixo
+
+O limite de requisições vale para a **conta inteira** — cada sessão aberta do
+Claude Code soma no mesmo balde. Um intervalo curto no painel não traz
+informação nova (as janelas de uso se movem devagar) e ainda ajuda a estourar o
+limite. Por isso o poll é fixo em **5 minutos**, e quando vem um `429` o painel:
+
+- **não** marca a conta como desconectada — o token continua válido, então pedir
+  reconexão só geraria mais requisições e pioraria o problema;
+- espera com backoff exponencial (5 → 10 → 20 min, teto de 30), respeitando o
+  `Retry-After` quando o servidor manda;
+- mantém na tela o último dado bom, avisando "limite da conta · nova tentativa
+  em Xs".
+
+O contador de tokens, o custo e os gráficos continuam atualizando a cada 10s,
+porque vêm do scan dos **logs locais** e não gastam requisição nenhuma.
 
 ## Privacidade e segurança
 

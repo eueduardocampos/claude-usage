@@ -41,6 +41,23 @@ class Ctx:
     fx_ts = 0.0
     profile = None   # perfil da conta (cache de 6h) — p/ detectar a licenca
     profile_ts = 0.0
+    rate_limited = False   # 429 em curso (transitorio, NAO e desconexao)
+    rate_limit_hits = 0    # 429s seguidos — alimenta o backoff exponencial
+    next_poll_at = 0.0     # timestamp do proximo poll permitido
+
+
+# Ritmo do poll da API de uso. NAO e configuravel de proposito: o limite de
+# requisicoes e da CONTA INTEIRA (cada sessao aberta do Claude Code soma no
+# mesmo balde), entao um intervalo curto aqui derruba o painel sem ganhar
+# nada — as janelas de uso se movem devagar, e o contador de tokens ja
+# atualiza a cada 10s pelo scan dos logs locais, que nao gasta requisicao.
+POLL_SECONDS = 300           # 5 min entre leituras da API de uso
+BACKOFF_MAX_S = 1800         # teto do backoff quando toma 429 (30 min)
+MANUAL_MIN_INTERVAL_S = 60   # intervalo minimo entre "Atualizar" manuais
+
+# Uma leitura por vez: sem isso o botao Atualizar dispara em paralelo com o
+# poller e as duas requisicoes contam dobrado no rate limit.
+_poll_lock = threading.Lock()
 
 
 FX_URL = "https://economia.awesomeapi.com.br/json/last/USD-BRL"
@@ -149,6 +166,8 @@ def build_state() -> dict:
         "generated_at": dt.datetime.now(timezone.utc).isoformat(),
         "snapshot_ts": latest["ts"] if latest else None,
         "auth_connected": Ctx.auth_connected,
+        "rate_limited": Ctx.rate_limited,
+        "retry_in": max(0, int(Ctx.next_poll_at - time.time())) if Ctx.rate_limited else 0,
         "last_error": Ctx.last_error,
         "windows": windows_out,
         "switch": verdict,
@@ -158,7 +177,7 @@ def build_state() -> dict:
         "history": history,
         "plan": plan,
         "semrush": semrush,
-        "config": {"refresh_seconds": cfg.get("refresh_seconds"),
+        "config": {"refresh_seconds": POLL_SECONDS,
                    "intended_hours": cfg.get("intended_hours"),
                    "currency": cfg.get("currency"),
                    "usd_brl": cfg.get("usd_brl") or Ctx.fx_rate,
@@ -198,34 +217,75 @@ def detect_plan(profile):
     return None
 
 
+def _schedule_backoff(retry_after=None):
+    """Espera crescente depois de um 429, respeitando o Retry-After do servidor."""
+    Ctx.rate_limit_hits += 1
+    espera = POLL_SECONDS * (2 ** (Ctx.rate_limit_hits - 1))
+    if retry_after:
+        espera = max(espera, float(retry_after))
+    espera = min(BACKOFF_MAX_S, espera)
+    Ctx.next_poll_at = time.time() + espera
+    return espera
+
+
 def poll_once(log=print):
-    """Escaneia logs e grava um snapshot da API. Atualiza flags de auth."""
-    refresh_fx(log)
-    refresh_profile(log)
+    """Escaneia logs e grava um snapshot da API.
+
+    Regra central: 429 NAO e desconexao. O token segue valido; o que houve foi
+    limite de requisicoes da conta. Marcar auth_connected=False aqui fazia o
+    painel pedir reconexao, e reconectar gera MAIS requisicoes — o remedio
+    piorava a doenca."""
+    if not _poll_lock.acquire(blocking=False):
+        log("[poll] ja existe uma leitura em andamento, pulando")
+        return
     try:
-        Ctx.store.scan(log=lambda *a: None)
-    except Exception as e:
-        log(f"[poll] scan falhou: {e}")
-    try:
-        raw = usage_api.fetch_usage(Ctx.token_store, log=log)
-        Ctx.store.insert_snapshot(usage_api.normalize(raw))
-        Ctx.auth_connected = True
-        Ctx.last_error = None
-        Ctx.last_poll = time.time()
-    except auth.AuthError as e:
-        Ctx.auth_connected = False
-        Ctx.last_error = f"auth: {e}"
-        log(f"[poll] sem token valido: {e}")
-    except Exception as e:
-        Ctx.auth_connected = False
-        Ctx.last_error = str(e)
-        log(f"[poll] erro: {e}")
+        refresh_fx(log)
+        refresh_profile(log)
+        try:
+            Ctx.store.scan(log=lambda *a: None)
+        except Exception as e:
+            log(f"[poll] scan falhou: {e}")
+        try:
+            raw = usage_api.fetch_usage(Ctx.token_store, log=log)
+            Ctx.store.insert_snapshot(usage_api.normalize(raw))
+            Ctx.auth_connected = True
+            Ctx.rate_limited = False
+            Ctx.rate_limit_hits = 0
+            Ctx.last_error = None
+            Ctx.last_poll = time.time()
+            Ctx.next_poll_at = time.time() + POLL_SECONDS
+        except usage_api.RateLimited as e:
+            # transitorio: preserva auth_connected e o ultimo snapshot bom
+            espera = _schedule_backoff(e.retry_after)
+            Ctx.rate_limited = True
+            Ctx.last_error = (
+                f"limite de requisicoes da conta; nova tentativa em {int(espera)}s")
+            log(f"[poll] 429 ({Ctx.rate_limit_hits}x), aguardando {int(espera)}s")
+        except auth.TransientAuthError as e:
+            espera = _schedule_backoff()
+            Ctx.rate_limited = True
+            Ctx.last_error = f"renovacao adiada ({e}); nova tentativa em {int(espera)}s"
+            log(f"[poll] falha transitoria ao renovar: {e}")
+        except auth.AuthError as e:
+            Ctx.auth_connected = False
+            Ctx.rate_limited = False
+            Ctx.last_error = f"auth: {e}"
+            Ctx.next_poll_at = time.time() + POLL_SECONDS
+            log(f"[poll] sem token valido: {e}")
+        except Exception as e:
+            # rede/servidor: nao mexe em auth_connected, so tenta mais tarde
+            Ctx.last_error = str(e)
+            Ctx.next_poll_at = time.time() + POLL_SECONDS
+            log(f"[poll] erro: {e}")
+    finally:
+        _poll_lock.release()
 
 
 def poller_loop():
     while True:
-        time.sleep(max(15, int(Ctx.cfg.get("refresh_seconds", 120))))
-        poll_once()
+        time.sleep(5)
+        if time.time() >= Ctx.next_poll_at:
+            poll_once()
 
 
 SCAN_INTERVAL = 10  # scan incremental frequente para o total "quase em tempo real"
@@ -319,14 +379,11 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             body = {}
         if p == "/api/config":
-            for k in ("refresh_seconds", "intended_hours", "subscription_brl", "plan"):
+            # refresh_seconds saiu de proposito: o ritmo da API e fixo
+            # (POLL_SECONDS) para nao estourar o limite da conta.
+            for k in ("intended_hours", "subscription_brl", "plan"):
                 if k in body:
                     Ctx.cfg[k] = body[k]
-            # piso de 15s: abaixo disso o poll da API vira martelo e trava tudo
-            try:
-                Ctx.cfg["refresh_seconds"] = max(15, int(Ctx.cfg.get("refresh_seconds") or 120))
-            except (TypeError, ValueError):
-                Ctx.cfg["refresh_seconds"] = 120
             save_config(Ctx.cfg)
             self._send(200, json.dumps({"ok": True, "config": Ctx.cfg}))
         elif p == "/api/semrush":
@@ -336,8 +393,23 @@ class Handler(BaseHTTPRequestHandler):
                 save_config(Ctx.cfg)
             self._send(200, json.dumps({"ok": True}))
         elif p == "/api/refresh":
-            poll_once()
-            self._send(200, json.dumps({"ok": True}))
+            # respeita o backoff e um intervalo minimo: o botao Atualizar nao
+            # pode virar um jeito de furar o rate limit da conta
+            agora = time.time()
+            espera = Ctx.next_poll_at - agora
+            recente = Ctx.last_poll and (agora - Ctx.last_poll) < MANUAL_MIN_INTERVAL_S
+            if Ctx.rate_limited and espera > 0:
+                self._send(200, json.dumps({
+                    "ok": False, "reason": "rate_limited",
+                    "retry_in": int(espera)}))
+            elif recente:
+                restante = MANUAL_MIN_INTERVAL_S - (agora - Ctx.last_poll)
+                self._send(200, json.dumps({
+                    "ok": False, "reason": "muito_recente",
+                    "retry_in": int(restante)}))
+            else:
+                poll_once()
+                self._send(200, json.dumps({"ok": True}))
         else:
             self._send(404, "not found", "text/plain")
 
@@ -362,10 +434,7 @@ def load_config():
             cfg.update(json.load(f))
     except (FileNotFoundError, json.JSONDecodeError):
         pass
-    try:
-        cfg["refresh_seconds"] = max(15, int(cfg.get("refresh_seconds") or 120))
-    except (TypeError, ValueError):
-        cfg["refresh_seconds"] = 120
+    cfg["refresh_seconds"] = POLL_SECONDS  # fixo; ignora valor antigo do arquivo
     return cfg
 
 

@@ -14,6 +14,25 @@ import urllib.error
 
 import auth
 
+class RateLimited(Exception):
+    """429 da API de uso. E transitorio e da conta inteira (todas as sessoes do
+    Claude Code somam no mesmo limite) — NAO significa token invalido, entao o
+    painel NUNCA deve pedir reconexao por causa disso."""
+
+    def __init__(self, retry_after=None):
+        self.retry_after = retry_after
+        super().__init__("limite de requisicoes da conta")
+
+
+def _retry_after(e) -> float | None:
+    """Le o Retry-After da resposta, quando o servidor manda."""
+    try:
+        v = e.headers.get("Retry-After")
+        return float(v) if v else None
+    except Exception:
+        return None
+
+
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 PROFILE_URL = "https://api.anthropic.com/api/oauth/profile"
 BETA_HEADER = "oauth-2025-04-20"
@@ -44,10 +63,17 @@ def fetch_usage(store: auth.TokenStore, log=print) -> dict:
     try:
         raw = _get(USAGE_URL, token)
     except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise RateLimited(_retry_after(e)) from e
         if e.code == 401:
             log("[usage] 401, renovando token e tentando de novo...")
             token = auth.force_refresh(store, log=log)
-            raw = _get(USAGE_URL, token)
+            try:
+                raw = _get(USAGE_URL, token)
+            except urllib.error.HTTPError as e2:
+                if e2.code == 429:
+                    raise RateLimited(_retry_after(e2)) from e2
+                raise
         else:
             raise
     return raw
@@ -59,6 +85,8 @@ def fetch_profile(store: auth.TokenStore, log=print) -> dict:
     try:
         return _get(PROFILE_URL, token)
     except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise RateLimited(_retry_after(e)) from e
         if e.code == 401:
             token = auth.force_refresh(store, log=log)
             return _get(PROFILE_URL, token)

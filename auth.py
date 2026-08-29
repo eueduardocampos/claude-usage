@@ -194,6 +194,15 @@ def exchange_code(code: str, code_verifier: str, redirect_uri: str,
 
 # --- orquestracao ------------------------------------------------------------
 
+class TransientAuthError(Exception):
+    """Falha TEMPORARIA ao renovar o token (429 ou 5xx).
+
+    Separada da AuthError de proposito: AuthError significa "precisa de login
+    novo"; esta aqui significa "tenta de novo daqui a pouco". Confundir as duas
+    faz o painel pedir reconexao no meio de um rate limit — e reconectar gera
+    mais requisicoes, que e exatamente o que nao se deve fazer nessa hora."""
+
+
 class AuthError(Exception):
     pass
 
@@ -218,6 +227,8 @@ def get_valid_token(store: TokenStore, allow_bootstrap=True, log=print) -> str:
                 return new["access_token"]
             except urllib.error.HTTPError as e:
                 log(f"[auth] refresh proprio falhou: HTTP {e.code}")
+                if e.code == 429 or e.code >= 500:
+                    raise TransientAuthError(f"HTTP {e.code} ao renovar") from e
 
     # 3. bootstrap a partir do arquivo do Claude
     if allow_bootstrap:
@@ -233,6 +244,8 @@ def get_valid_token(store: TokenStore, allow_bootstrap=True, log=print) -> str:
             except urllib.error.HTTPError as e:
                 log(f"[auth] bootstrap falhou: HTTP {e.code} "
                     f"(refresh token do arquivo provavelmente morto)")
+                if e.code == 429 or e.code >= 500:
+                    raise TransientAuthError(f"HTTP {e.code} no bootstrap") from e
 
     # 4. precisa de login interativo
     raise AuthError("Sem token valido. Necessario login PKCE (Conectar conta).")

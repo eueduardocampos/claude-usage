@@ -141,6 +141,7 @@ html.is-dash #root {
   animation: mc-pulse 2s infinite;
 }
 .mc-live.off { background: #f2404c; animation: none; }
+.mc-live.warn { background: #fab219; animation: none; }
 
 /* ---- rota /widget: cara de widget do macOS ---- */
 html.is-widget,

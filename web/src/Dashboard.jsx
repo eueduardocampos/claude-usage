@@ -169,20 +169,30 @@ function GaugeBar({ pct, projected, color }) {
 
 // ---------------------------------------------------------------- seções
 
-function StatusBar({ state, latency, now, onRefresh, onReconnect }) {
+function StatusBar({ state, latency, now, onRefresh, onReconnect, aviso }) {
   const connected = state?.auth_connected;
+  // 429 e limite de requisicoes da conta, nao token invalido: mostra espera,
+  // nunca oferece "reconectar" (reconectar gera mais requisicoes e piora).
+  const limitado = !!state?.rate_limited;
   const err = state?.last_error;
+  const situacao = !state
+    ? 'conectando…'
+    : limitado
+      ? `limite da conta · nova tentativa em ${state.retry_in}s`
+      : connected
+        ? 'conta conectada'
+        : 'desconectado';
   return (
     <header
       className="sticky top-0 z-10 border-b backdrop-blur"
-      style={{ borderColor: C.border, background: 'rgba(13,13,13,0.85)' }}
+      style={{ borderColor: C.border, background: 'rgba(5,10,48,0.88)' }}
     >
       <div className="mx-auto flex w-full max-w-[2400px] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2.5 sm:px-6 xl:px-8">
         <div className="flex items-center gap-2.5">
-          <span className={`mc-live ${connected ? '' : 'off'}`} />
+          <span className={`mc-live ${limitado ? 'warn' : connected ? '' : 'off'}`} />
           <div className="leading-tight">
             <div className="text-[13px] font-bold tracking-wide">CLAUDE USAGE · OPS</div>
-            <div className="mc-label">{connected ? 'conta conectada' : state ? 'desconectado' : 'conectando…'}</div>
+            <div className="mc-label">{situacao}</div>
           </div>
         </div>
 
@@ -193,9 +203,14 @@ function StatusBar({ state, latency, now, onRefresh, onReconnect }) {
           <span>
             api <span style={{ color: C.ink2 }}>{latency == null ? '—' : `${Math.round(latency)}ms`}</span>
           </span>
-          {err && (
+          {err && !limitado && (
             <span className="max-w-[40ch] truncate" style={{ color: C.warn }} title={err}>
               ⚠ {err}
+            </span>
+          )}
+          {aviso && (
+            <span style={{ color: C.warn }} title={aviso}>
+              {aviso}
             </span>
           )}
         </div>
@@ -204,7 +219,7 @@ function StatusBar({ state, latency, now, onRefresh, onReconnect }) {
           <span className="mc-num text-[13px]" style={{ color: C.ink2 }}>
             {new Date(now).toLocaleTimeString('pt-BR')}
           </span>
-          {!connected && state && (
+          {!connected && !limitado && state && (
             <button className="mc-btn" style={{ color: C.warn, borderColor: `${C.warn}66` }} onClick={onReconnect}>
               reconectar
             </button>
@@ -722,8 +737,7 @@ function SnapChart({ snapshots }) {
   );
 }
 
-function FooterStrip({ state, onSaveRefresh, generatedAt, now }) {
-  const [sec, setSec] = useState('');
+function FooterStrip({ state, generatedAt, now }) {
   const cur = state?.config?.currency || 'BRL';
   const fx = state?.config?.usd_brl || null;
   const extra = state?.extra_usage;
@@ -746,28 +760,12 @@ function FooterStrip({ state, onSaveRefresh, generatedAt, now }) {
           </div>
         </div>
       )}
-      <div className="flex items-end gap-2">
-        <div>
-          <div className="mc-label">refresh da api (s) · mín. 15</div>
-          <input
-            className="mc-input"
-            type="number"
-            min="15"
-            placeholder={String(state?.config?.refresh_seconds ?? 120)}
-            value={sec}
-            onChange={(e) => setSec(e.target.value)}
-          />
+      <div>
+        <div className="mc-label">limites ao vivo</div>
+        <div className="mc-num text-[13px]" style={{ color: C.ink2 }}>
+          a cada {Math.round((state?.config?.refresh_seconds ?? 300) / 60)} min
+          <span className="text-[11px]" style={{ color: C.muted }}> · ritmo fixo</span>
         </div>
-        <button
-          className="mc-btn"
-          onClick={() => {
-            const v = parseInt(sec, 10);
-            if (!Number.isNaN(v)) onSaveRefresh(Math.max(15, v));
-            setSec('');
-          }}
-        >
-          salvar
-        </button>
       </div>
       <div className="mc-num ml-auto text-right text-[11px]" style={{ color: C.muted }}>
         estado gerado há {ago(generatedAt, now)} · roda em localhost · uso pessoal
@@ -783,6 +781,7 @@ export default function Dashboard() {
   const [total, setTotal] = useState(null);
   const [history, setHistory] = useState(null);
   const [latency, setLatency] = useState(null);
+  const [aviso, setAviso] = useState(null);
   const now = useNow(1000);
 
   const loadState = useCallback(async () => {
@@ -826,9 +825,18 @@ export default function Dashboard() {
 
   const refreshNow = async () => {
     try {
-      await api.refresh();
+      const r = await api.refresh();
+      if (r && r.ok === false) {
+        // o backend recusou para nao furar o rate limit da conta
+        setAviso(
+          r.reason === 'rate_limited'
+            ? `limite da conta — nova tentativa em ${r.retry_in}s`
+            : `aguarde ${r.retry_in}s para atualizar de novo`,
+        );
+        setTimeout(() => setAviso(null), 5000);
+      }
     } catch {
-      /* */
+      /* mantem o ultimo estado */
     }
     loadState();
     loadTotal();
@@ -836,10 +844,6 @@ export default function Dashboard() {
   };
   const setHours = async (h) => {
     await api.setConfig({ intended_hours: h });
-    loadState();
-  };
-  const saveRefresh = async (s) => {
-    await api.setConfig({ refresh_seconds: s });
     loadState();
   };
 
@@ -856,6 +860,7 @@ export default function Dashboard() {
         state={state}
         latency={latency}
         now={now}
+        aviso={aviso}
         onRefresh={refreshNow}
         onReconnect={() => api.authStart()}
       />
@@ -940,12 +945,7 @@ export default function Dashboard() {
           </Card>
         )}
 
-        <FooterStrip
-          state={state}
-          onSaveRefresh={saveRefresh}
-          generatedAt={state?.generated_at}
-          now={now}
-        />
+        <FooterStrip state={state} generatedAt={state?.generated_at} now={now} />
       </main>
     </div>
   );
