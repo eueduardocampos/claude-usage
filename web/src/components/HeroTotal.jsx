@@ -27,7 +27,7 @@ function useCountUp(target, dur = 1100) {
 export default function HeroTotal({ tokens = 0, cost = 0, turns = 0 }) {
   const shown = useCountUp(tokens);
   return (
-    <div className="mx-4 mt-4 rounded-3xl border border-white/20 bg-gradient-to-br from-indigo-500/25 via-fuchsia-500/20 to-sky-500/25 p-6 shadow-lg backdrop-blur-xl">
+    <div className="mx-4 mt-4 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-6 py-5">
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-black/50 dark:text-white/60">
         Total de tokens · vida toda <span className="live-dot" />
       </div>

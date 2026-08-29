@@ -7,6 +7,11 @@ Projecao por janela:
   - fallback: taxa implicita = utilization / horas_decorridas (= util/elapsed_frac no reset)
 Semaforo: <80 SEGURO | 80-100 ATENCAO | >=100 RISCO | sem dados INDETERMINADO
 
+Projecao inteligente (smart_project_window):
+  Usa o perfil historico de uso por hora do dia para ponderar cada hora futura.
+  Horas de madrugada (peso ~0) contribuem muito menos que horas de pico (peso 1.0).
+  Retorna tambem projected_linear (projecao simples) para comparacao na UI.
+
 Veredito de troca: a conta nao expoe bucket de Opus, entao o Opus pesa sobre a
 sessao (5h) e o semanal geral (7d). Estima-se o burn do Opus aplicando um fator
 de intensidade (peso de preco do Opus / peso do modelo dominante atual).
@@ -75,8 +80,8 @@ def project_window(util, resets_at, window_hours, snap_rate=None, now=None):
         rate = util / elapsed_h               # media desde a abertura da janela
         projected = util + rate * htr         # == util / elapsed_frac
     else:
-        rate = None                           # cedo demais para projetar
-        projected = None
+        rate = None                           # cedo demais para projetar taxa
+        projected = util                      # assume uso atual como minimo conservador
     out["rate"] = rate
     if projected is not None:
         projected = min(projected, 999.0)
@@ -120,6 +125,114 @@ def switch_verdict(windows_state, dominant_model, intended_hours, target="opus")
     return {"verdict": worst, "message": msg, "factor": round(factor, 2),
             "dominant_model": dominant_model, "target": target,
             "intended_hours": intended_hours, "windows": results}
+
+
+def _build_weight_map(hourly_profile):
+    """Normaliza perfil historico para {hora: peso} com pico = 1.0.
+    Horas sem dados ficam com 0.0 (sem uso historico = sem projecao de uso).
+    """
+    if not hourly_profile:
+        return {}
+    m = {p["hour"]: p["avg_tokens"] for p in hourly_profile}
+    peak = max(m.values()) or 1
+    return {h: v / peak for h, v in m.items()}
+
+
+def smart_project_window(util, resets_at, window_hours, hourly_profile,
+                         snap_rate=None, now=None):
+    """Projecao ponderada pelo perfil historico de uso por hora do dia.
+
+    Para cada hora futura ate o reset, aplica o peso historico daquela
+    hora do dia (ex.: madrugada ~ 0, pico de manha ~ 1.0). A taxa base
+    (snap_rate ou media da janela) e a taxa na hora atual de trabalho;
+    as demais horas escalam proporcionalmente.
+
+    Retorna o mesmo dict de project_window mais:
+      projected_linear  — projecao linear simples, para referencia na UI
+      smart             — True quando o perfil foi aplicado
+    """
+    now = now or dt.datetime.now(timezone.utc)
+    now_local = dt.datetime.now()  # horario local para lookup hora-do-dia
+    reset = parse_iso(resets_at)
+    out = {"utilization": util, "resets_at": resets_at, "hours_to_reset": None,
+           "projected": None, "projected_linear": None,
+           "status": "INDETERMINADO", "rate": None, "eta_100": None,
+           "smart": False}
+    if util is None or reset is None:
+        return out
+
+    start = reset - dt.timedelta(hours=window_hours)
+    elapsed_h = max((now - start).total_seconds() / 3600, 0.0)
+    htr = max((reset - now).total_seconds() / 3600, 0.0)
+    out["hours_to_reset"] = htr
+
+    elapsed_frac = elapsed_h / window_hours if window_hours else 0
+    measured = snap_rate if (snap_rate is not None and snap_rate >= 0) else None
+    if measured is not None:
+        rate = measured
+    elif elapsed_frac >= 0.10 and elapsed_h > 0:
+        rate = util / elapsed_h
+    else:
+        rate = None
+    out["rate"] = rate
+
+    # Cedo demais para calcular taxa: usa util atual como projecao minima
+    if rate is None:
+        out["projected"] = util
+        out["projected_linear"] = util
+        out["status"] = classify(util)
+        out["smart"] = False
+        return out
+
+    # Projecao linear (referencia)
+    if rate is not None:
+        out["projected_linear"] = min(util + rate * htr, 999.0)
+
+    weights = _build_weight_map(hourly_profile)
+
+    if rate is not None and weights:
+        # Soma de horas futuras ponderadas pelo perfil historico
+        steps = int(htr) + 2
+        weighted_remaining = 0.0
+        for i in range(steps):
+            fraction = min(1.0, htr - i)
+            if fraction <= 0:
+                break
+            future_local = now_local + dt.timedelta(hours=i)
+            w = weights.get(future_local.hour, 0.0)
+            weighted_remaining += w * fraction
+
+        smart_proj = util + rate * weighted_remaining
+        out["projected"] = min(smart_proj, 999.0)
+        out["smart"] = True
+
+        # ETA para 100% via perfil (busca hora em que acumula o necessario)
+        if rate > 0 and util < 100:
+            needed_weighted = (100 - util) / rate
+            cumulative = 0.0
+            for i in range(steps):
+                fraction = min(1.0, htr - i)
+                if fraction <= 0:
+                    break
+                future_local = now_local + dt.timedelta(hours=i)
+                w = weights.get(future_local.hour, 0.0)
+                prev = cumulative
+                cumulative += w * fraction
+                if cumulative >= needed_weighted:
+                    # interpola dentro do intervalo
+                    leftover = needed_weighted - prev
+                    offset = i + (leftover / (w * fraction + 1e-9)) * fraction if w > 0 else i
+                    out["eta_100"] = (now + dt.timedelta(hours=offset)).isoformat()
+                    break
+    elif rate is not None:
+        # Sem perfil historico: cai para projecao linear
+        out["projected"] = out["projected_linear"]
+        if rate > 0 and util < 100:
+            h100 = (100 - util) / rate
+            out["eta_100"] = (now + dt.timedelta(hours=h100)).isoformat()
+
+    out["status"] = classify(out["projected"])
+    return out
 
 
 if __name__ == "__main__":

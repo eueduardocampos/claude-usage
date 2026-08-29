@@ -8,9 +8,11 @@ import datetime as dt
 import json
 import mimetypes
 import os
+import shutil
 import threading
 import time
 import traceback
+import urllib.request
 from datetime import timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -35,6 +37,28 @@ class Ctx:
     last_poll = None
     auth_connected = False
     _login_thread = None
+    fx_rate = None   # cotacao USD->BRL (cache de 1h)
+    fx_ts = 0.0
+    profile = None   # perfil da conta (cache de 6h) — p/ detectar a licenca
+    profile_ts = 0.0
+
+
+FX_URL = "https://economia.awesomeapi.com.br/json/last/USD-BRL"
+
+
+def refresh_fx(log=print):
+    """Atualiza a cotacao USD->BRL se o cache tiver mais de 1h.
+    `usd_brl` no config.json, quando definido, tem prioridade (fixo)."""
+    if time.time() - Ctx.fx_ts < 3600:
+        return
+    try:
+        with urllib.request.urlopen(FX_URL, timeout=6) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        Ctx.fx_rate = float(data["USDBRL"]["bid"])
+        Ctx.fx_ts = time.time()
+    except Exception as e:
+        Ctx.fx_ts = time.time() - 3000  # tenta de novo em ~10min
+        log(f"[fx] cotacao indisponivel: {e}")
 
 
 # --- montagem do estado ------------------------------------------------------
@@ -42,6 +66,7 @@ class Ctx:
 def build_state() -> dict:
     cfg = Ctx.cfg
     latest = Ctx.store.latest_state()
+    hourly_profile = Ctx.store.hour_of_day_avg()
     windows_out, states = {}, {}
     if latest:
         for win, hrs in WINDOW_HOURS.items():
@@ -49,8 +74,9 @@ def build_state() -> dict:
             if not wd or wd.get("utilization") is None:
                 continue
             snap_rate = Ctx.store.snapshot_rate(win)
-            st = forecast.project_window(wd["utilization"], wd["resets_at"],
-                                         hrs, snap_rate=snap_rate)
+            st = forecast.smart_project_window(
+                wd["utilization"], wd["resets_at"], hrs,
+                hourly_profile, snap_rate=snap_rate)
             st["label"] = WINDOW_LABELS[win]
             st["window"] = win
             windows_out[win] = st
@@ -71,9 +97,53 @@ def build_state() -> dict:
             "limit": (eu["monthly_limit"] / div) if eu.get("monthly_limit") is not None else None,
             "currency": eu.get("currency") or cfg.get("currency"),
         }
+        # licenca x extras: mede pelo historico de used_credits dos snapshots
+        try:
+            series = Ctx.store.extra_credit_series(24)
+        except Exception:
+            series = []
+        rate = spent_24h = None
+        burning = False
+        if len(series) >= 2:
+            def _t(s):
+                return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+            t_last = _t(series[-1][0])
+            uc_last = series[-1][1]
+            spent_24h = max(0.0, (uc_last - series[0][1]) / div)
+            span_h = (t_last - _t(series[0][0])).total_seconds() / 3600
+            if span_h >= 0.5:
+                rate = max(0.0, (uc_last - series[0][1]) / div / span_h)
+            # "queimando agora" = credito subiu entre os DOIS ultimos snapshots.
+            # Comparar so o par mais recente faz a fonte voltar a "licenca" um
+            # ciclo de poll apos o reset; o caso "estourado mas ocioso" e coberto
+            # pelo cheque de utilizacao >= 100% logo abaixo.
+            burning = uc_last - series[-2][1] > 0
+        # janela estourada (>=100%) = qualquer requisicao nova ja sai dos extras
+        if not burning:
+            for st in states.values():
+                if (st.get("utilization") or 0) >= 100:
+                    burning = True
+                    break
+        extra.update({"rate_per_hour": rate, "spent_24h": spent_24h,
+                      "burning": burning})
 
     history = {sc: Ctx.store.scope_summary(sc)
                for sc in ("geral", "mes", "semana", "dia")}
+
+    semrush = {
+        "balance": cfg.get("semrush_units_balance"),
+        "limit": cfg.get("semrush_units_limit"),
+        "updated_at": cfg.get("semrush_units_updated_at"),
+    }
+
+    org = (Ctx.profile or {}).get("organization") or {}
+    plan = {
+        "selected": cfg.get("plan"),
+        "detected": detect_plan(Ctx.profile),
+        "org_name": org.get("name"),
+        "rate_limit_tier": org.get("rate_limit_tier"),
+        "seat_tier": org.get("seat_tier"),
+    }
 
     return {
         "generated_at": dt.datetime.now(timezone.utc).isoformat(),
@@ -86,16 +156,52 @@ def build_state() -> dict:
         "dominant_model": dominant,
         "extra_usage": extra,
         "history": history,
+        "plan": plan,
+        "semrush": semrush,
         "config": {"refresh_seconds": cfg.get("refresh_seconds"),
                    "intended_hours": cfg.get("intended_hours"),
-                   "currency": cfg.get("currency")},
+                   "currency": cfg.get("currency"),
+                   "usd_brl": cfg.get("usd_brl") or Ctx.fx_rate,
+                   "subscription_brl": cfg.get("subscription_brl")},
     }
 
 
 # --- poller ------------------------------------------------------------------
 
+def refresh_profile(log=print):
+    """Perfil da conta, cacheado por 6h — muda raramente."""
+    if time.time() - Ctx.profile_ts < 6 * 3600:
+        return
+    try:
+        Ctx.profile = usage_api.fetch_profile(Ctx.token_store, log=log)
+        Ctx.profile_ts = time.time()
+    except Exception as e:
+        Ctx.profile_ts = time.time() - 5.5 * 3600  # tenta de novo em ~30min
+        log(f"[profile] indisponivel: {e}")
+
+
+def detect_plan(profile):
+    """Mapeia (organization_type, rate_limit_tier) num id de licenca conhecido."""
+    org = (profile or {}).get("organization") or {}
+    acct = (profile or {}).get("account") or {}
+    ot = (org.get("organization_type") or "").lower()
+    tier = (org.get("rate_limit_tier") or "").lower()
+    if "enterprise" in ot:
+        return "enterprise"
+    if "team" in ot:
+        # assento com limites estilo Max = premium (Claude Code incluso)
+        return "team_premium" if "max" in tier else "team_standard"
+    if acct.get("has_claude_max") or "max" in ot or "max" in tier:
+        return "max_20x" if "20x" in tier else "max_5x"
+    if acct.get("has_claude_pro") or "pro" in tier:
+        return "pro"
+    return None
+
+
 def poll_once(log=print):
     """Escaneia logs e grava um snapshot da API. Atualiza flags de auth."""
+    refresh_fx(log)
+    refresh_profile(log)
     try:
         Ctx.store.scan(log=lambda *a: None)
     except Exception as e:
@@ -193,6 +299,7 @@ class Handler(BaseHTTPRequestHandler):
                     "snapshots": Ctx.store.snapshot_history(48),
                     "daily": Ctx.store.daily_series(Ctx.cfg.get("daily_days", 30)),
                     "hour_of_day": Ctx.store.hour_of_day_avg(),
+                    "heatmap": Ctx.store.heatmap_data(),
                 }
                 self._send(200, json.dumps(out, ensure_ascii=False))
             elif p == "/auth/start":
@@ -212,11 +319,22 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             body = {}
         if p == "/api/config":
-            for k in ("refresh_seconds", "intended_hours"):
+            for k in ("refresh_seconds", "intended_hours", "subscription_brl", "plan"):
                 if k in body:
                     Ctx.cfg[k] = body[k]
+            # piso de 15s: abaixo disso o poll da API vira martelo e trava tudo
+            try:
+                Ctx.cfg["refresh_seconds"] = max(15, int(Ctx.cfg.get("refresh_seconds") or 120))
+            except (TypeError, ValueError):
+                Ctx.cfg["refresh_seconds"] = 120
             save_config(Ctx.cfg)
             self._send(200, json.dumps({"ok": True, "config": Ctx.cfg}))
+        elif p == "/api/semrush":
+            if "balance" in body and isinstance(body["balance"], (int, float)):
+                Ctx.cfg["semrush_units_balance"] = int(body["balance"])
+                Ctx.cfg["semrush_units_updated_at"] = dt.datetime.now(timezone.utc).isoformat()
+                save_config(Ctx.cfg)
+            self._send(200, json.dumps({"ok": True}))
         elif p == "/api/refresh":
             poll_once()
             self._send(200, json.dumps({"ok": True}))
@@ -229,7 +347,12 @@ class Handler(BaseHTTPRequestHandler):
 CONFIG_PATH = os.path.join(HERE, "config.json")
 DEFAULTS = {"port": 8090, "refresh_seconds": 120, "currency": "BRL",
             "credits_divisor": 100, "intended_hours": 2.0, "daily_days": 30,
-            "callback_port": 54545, "open_browser": True}
+            "callback_port": 54545, "open_browser": True,
+            "semrush_units_balance": None, "semrush_units_limit": 49190,
+            "semrush_units_updated_at": None,
+            "usd_brl": None,  # None = cotacao automatica (AwesomeAPI, cache 1h)
+            "subscription_brl": None,  # valor mensal da licenca (R$), p/ balanço
+            "plan": None}  # id da licenca (pro, max_5x, ...); None = usar a detectada
 
 
 def load_config():
@@ -239,6 +362,10 @@ def load_config():
             cfg.update(json.load(f))
     except (FileNotFoundError, json.JSONDecodeError):
         pass
+    try:
+        cfg["refresh_seconds"] = max(15, int(cfg.get("refresh_seconds") or 120))
+    except (TypeError, ValueError):
+        cfg["refresh_seconds"] = 120
     return cfg
 
 
@@ -250,9 +377,30 @@ def save_config(cfg):
         pass
 
 
+def _db_path():
+    """O sqlite precisa de disco local: rodar o painel de dentro de um drive
+    sincronizado (Google Drive etc.) deixa cada write segurando o lock por
+    segundos e o /api/state estoura o timeout dos clientes (Stream Deck)."""
+    base = (os.environ.get("LOCALAPPDATA")
+            or os.path.join(os.path.expanduser("~"), ".local", "share"))
+    d = os.path.join(base, "claude-usage")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        return os.path.join(HERE, "painel.db")
+    path = os.path.join(d, "painel.db")
+    legacy = os.path.join(HERE, "painel.db")
+    if not os.path.exists(path) and os.path.exists(legacy):
+        try:
+            shutil.copy2(legacy, path)
+        except OSError:
+            pass
+    return path
+
+
 def run():
     Ctx.cfg = load_config()
-    Ctx.store = store_mod.Store(os.path.join(HERE, "painel.db"))
+    Ctx.store = store_mod.Store(_db_path())
     Ctx.token_store = auth.TokenStore(HERE)
 
     poll_once()  # poll inicial sincrono: auth_connected ja correto na 1a carga
@@ -260,7 +408,8 @@ def run():
     threading.Thread(target=scan_loop, daemon=True).start()
 
     port = int(Ctx.cfg.get("port", 8090))
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    host = Ctx.cfg.get("host", "127.0.0.1")
+    httpd = ThreadingHTTPServer((host, port), Handler)
     url = f"http://localhost:{port}"
     print(f"[painel] rodando em {url}  (refresh={Ctx.cfg['refresh_seconds']}s)")
     if Ctx.cfg.get("open_browser"):

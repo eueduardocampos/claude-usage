@@ -25,6 +25,8 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 ## Recursos
 
 - 🔢 **Total absoluto de tokens da vida toda**, atualizando quase em tempo real.
+- 🧾 **Licença vs consumo**: detecta seu plano pela API (Pro, Max, Time, Enterprise), compara o que você paga (tabela Brasil) com o consumo equivalente em preço de API e mostra se está compensando.
+- 🔥 **Fonte dos tokens ao vivo**: dentro da licença ou queimando créditos extras — com gasto das últimas 24h e média por hora dos extras.
 - 🚦 **Semáforo por janela** (verde < 80% projetado · amarelo 80–100% · vermelho ≥ 100%).
 - 🔮 **Projeção até o reset** com base no ritmo medido de consumo.
 - 🤖 **Veredito de troca de modelo** combinando limite ao vivo + ritmo dos logs.
@@ -69,6 +71,11 @@ Dois detalhes importantes:
   (`port` e `open_browser`). Se a porta já estiver em uso, troque por outra.
 
 No Windows você também pode dar dois cliques em `iniciar-painel.bat`.
+
+> 💾 O banco local (`painel.db`) fica em `%LOCALAPPDATA%\claude-usage\` no Windows
+> (ou `~/.local/share/claude-usage/` no macOS/Linux) e é migrado automaticamente
+> na primeira execução. Rodar o banco em disco local é o que mantém a API
+> respondendo em milissegundos mesmo com o código num drive sincronizado.
 
 ## App de desktop (macOS, Windows e Linux)
 

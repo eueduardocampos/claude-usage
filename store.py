@@ -298,6 +298,19 @@ class Store:
         self.conn.commit()
 
     @_locked
+    def extra_credit_series(self, hours: int = 24):
+        """Serie (ts, used_credits) dos snapshots — mede o ritmo de gasto do
+        excedente (tokens extras alem da licenca)."""
+        lb = (dt.datetime.utcnow() - dt.timedelta(hours=hours)).strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z")
+        cur = self.conn.cursor()
+        rows = cur.execute(
+            """SELECT ts, MAX(used_credits) AS uc FROM api_snapshots
+               WHERE ts >= ? AND used_credits IS NOT NULL
+               GROUP BY ts ORDER BY ts""", (lb,)).fetchall()
+        return [(r["ts"], r["uc"]) for r in rows]
+
+    @_locked
     def latest_state(self):
         """Ultimo snapshot gravado (todas as janelas no mesmo ts)."""
         cur = self.conn.cursor()
@@ -338,6 +351,25 @@ class Store:
             return None  # span curto demais: deixa o fallback (media da janela) decidir
         rate = (newest["utilization"] - oldest["utilization"]) / hours
         return rate if rate >= 0 else None  # queda = reset de janela, ignora
+
+    @_locked
+    def heatmap_data(self):
+        """Media de tokens por (dia-da-semana, hora-do-dia) para heatmap.
+        dow: 0=Dom 1=Seg ... 6=Sab. Retorna lista de {dow, hour, avg_tokens}."""
+        cur = self.conn.cursor()
+        rows = cur.execute("""
+            SELECT
+                CAST(strftime('%w', timestamp, 'localtime') AS INTEGER) dow,
+                CAST(strftime('%H', timestamp, 'localtime') AS INTEGER) hh,
+                SUM(input_tokens+output_tokens+cache_read+cache_creation) tokens,
+                COUNT(DISTINCT strftime('%Y-%m-%d', timestamp, 'localtime')) days
+            FROM turns
+            GROUP BY dow, hh
+            ORDER BY dow, hh
+        """).fetchall()
+        return [{"dow": r["dow"], "hour": r["hh"],
+                 "avg_tokens": (r["tokens"] or 0) / r["days"] if r["days"] else 0}
+                for r in rows if r["dow"] is not None and r["hh"] is not None]
 
     @_locked
     def snapshot_history(self, hours: int = 48):

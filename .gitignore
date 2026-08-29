@@ -20,3 +20,7 @@ Thumbs.db
 .idea/
 .vscode/
 dist-release/
+
+# Logs e utilitarios locais da maquina
+*.log
+manter-painel-online.ps1

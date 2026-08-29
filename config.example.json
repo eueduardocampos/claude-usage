@@ -1,4 +1,4 @@
-{
+﻿{
   "port": 8090,
   "refresh_seconds": 120,
   "currency": "BRL",
@@ -6,5 +6,8 @@
   "intended_hours": 2.0,
   "daily_days": 30,
   "callback_port": 54545,
-  "open_browser": true
+  "open_browser": true,
+  "usd_brl": null,
+  "subscription_brl": null,
+  "plan": null
 }

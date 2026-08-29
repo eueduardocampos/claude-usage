@@ -15,6 +15,7 @@ import urllib.error
 import auth
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+PROFILE_URL = "https://api.anthropic.com/api/oauth/profile"
 BETA_HEADER = "oauth-2025-04-20"
 
 # duracao de cada janela em horas (para projecao por elapsed_frac)
@@ -50,6 +51,18 @@ def fetch_usage(store: auth.TokenStore, log=print) -> dict:
         else:
             raise
     return raw
+
+
+def fetch_profile(store: auth.TokenStore, log=print) -> dict:
+    """Perfil da conta (tipo de organizacao, tier do assento) — p/ detectar a licenca."""
+    token = auth.get_valid_token(store, log=log)
+    try:
+        return _get(PROFILE_URL, token)
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            token = auth.force_refresh(store, log=log)
+            return _get(PROFILE_URL, token)
+        raise
 
 
 def normalize(raw: dict) -> dict:
