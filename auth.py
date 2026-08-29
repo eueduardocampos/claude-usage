@@ -272,12 +272,20 @@ def run_pkce_login(store: TokenStore, callback_port: int = 54545,
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            msg = ("Conta conectada. Pode fechar esta aba e voltar ao painel."
-                   if captured.get("code") else
+            ok = bool(captured.get("code"))
+            msg = ("Conta conectada. Esta aba vai fechar sozinha…"
+                   if ok else
                    f"Falha no login: {captured.get('error')}")
+            # Tenta fechar a aba sozinho. Funciona quando a aba foi aberta
+            # direto no callback (sem historico); se o navegador bloquear,
+            # troca o texto de volta para o aviso manual.
+            script = ("<script>setTimeout(function(){window.close();"
+                      "setTimeout(function(){document.getElementById('m').textContent="
+                      "'Conta conectada. Pode fechar esta aba e voltar ao painel.';},400);"
+                      "},800);</script>" if ok else "")
             self.wfile.write(
                 f"<html><body style='font-family:sans-serif;padding:40px'>"
-                f"<h2>{msg}</h2></body></html>".encode("utf-8"))
+                f"<h2 id='m'>{msg}</h2>{script}</body></html>".encode("utf-8"))
             done.set()
 
     server = http.server.HTTPServer(("127.0.0.1", callback_port), Handler)
