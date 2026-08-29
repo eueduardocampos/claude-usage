@@ -198,7 +198,17 @@ function StatusBar({ state, latency, now, onRefresh, onReconnect, aviso }) {
 
         <div className="mc-num hidden items-center gap-4 text-[12px] sm:flex" style={{ color: C.muted }}>
           <span>
-            snapshot <span style={{ color: C.ink2 }}>{ago(state?.snapshot_ts, now)}</span>
+            snapshot{' '}
+            <span
+              style={{
+                color:
+                  state?.snapshot_ts && now - new Date(state.snapshot_ts).getTime() > 150000
+                    ? C.warn
+                    : C.ink2,
+              }}
+            >
+              {ago(state?.snapshot_ts, now)}
+            </span>
           </span>
           <span>
             api <span style={{ color: C.ink2 }}>{latency == null ? '—' : `${Math.round(latency)}ms`}</span>
@@ -317,9 +327,13 @@ function LiveTotal({ total, today, burn, dominant, fx }) {
   );
 }
 
-function WindowCard({ k, w, now }) {
+function WindowCard({ k, w, now, snapshotTs }) {
   const color = WIN_COLORS[k] || C.s1;
   const st = statusColor(w.status);
+  // O numero vem do ultimo snapshot, nao de agora. Em uso pesado ele anda
+  // ~1 ponto/min, entao esconder a idade faria a tecla mentir por omissao.
+  const idade = snapshotTs ? Math.round((now - new Date(snapshotTs).getTime()) / 1000) : 0;
+  const velho = idade > 150;
   return (
     <Card>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -331,6 +345,11 @@ function WindowCard({ k, w, now }) {
       </div>
       <div className="flex items-baseline gap-2">
         <span className="mc-num text-3xl font-bold">{Math.round(w.utilization)}%</span>
+        {velho && (
+          <span className="mc-num text-[12px]" style={{ color: C.warn }} title="idade do último snapshot da API">
+            há {idade < 120 ? `${idade}s` : `${Math.round(idade / 60)}min`}
+          </span>
+        )}
         {w.projected != null && (
           <span className="mc-num text-[13px]" style={{ color: C.muted }}>
             → {Math.round(w.projected)}% no reset
@@ -763,8 +782,8 @@ function FooterStrip({ state, generatedAt, now }) {
       <div>
         <div className="mc-label">limites ao vivo</div>
         <div className="mc-num text-[13px]" style={{ color: C.ink2 }}>
-          a cada {Math.round((state?.config?.refresh_seconds ?? 300) / 60)} min
-          <span className="text-[11px]" style={{ color: C.muted }}> · ritmo fixo</span>
+          a cada {state?.config?.refresh_seconds ?? 300}s
+          <span className="text-[11px]" style={{ color: C.muted }}> · acelera perto do limite</span>
         </div>
       </div>
       <div className="mc-num ml-auto text-right text-[11px]" style={{ color: C.muted }}>
@@ -890,7 +909,7 @@ export default function Dashboard() {
         {/* janelas ao vivo + queima */}
         <section className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(290px,1fr))]">
           {winKeys.map((k) => (
-            <WindowCard key={k} k={k} w={windows[k]} now={now} />
+            <WindowCard key={k} k={k} w={windows[k]} now={now} snapshotTs={state?.snapshot_ts} />
           ))}
           <SourcePanel extra={state?.extra_usage} cur={state?.config?.currency || 'BRL'} />
           <BurnPanel burn={burnMap} />

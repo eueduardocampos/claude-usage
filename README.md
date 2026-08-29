@@ -31,7 +31,7 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 - 🔮 **Projeção até o reset** com base no ritmo medido de consumo.
 - 🤖 **Veredito de troca de modelo** combinando limite ao vivo + ritmo dos logs.
 - 📊 Gráficos de tokens por dia, perfil por hora do dia e evolução das janelas.
-- ⏱️ **Ritmo seguro por padrão**: poll da API a cada 5 min com backoff em `429`, sem tratar limite de requisição como desconexão.
+- ⏱️ **Ritmo adaptativo e seguro**: lê a API a cada 90s perto do limite e a cada 5 min com folga, com backoff em `429` e sem tratar limite de requisição como desconexão.
 - 🍎 **Interface no estilo iOS** feita com [Konsta UI](https://konstaui.com) + Tailwind CSS v4.
 - 🪟 **Widget flutuante nativo** para macOS, Windows e Linux (sempre no topo) — veja [App de desktop](#app-de-desktop-macos-windows-e-linux).
 - 🔒 Roda 100% local; nenhum dado sai da sua máquina.
@@ -196,7 +196,7 @@ Copie `config.example.json` para `config.json` e ajuste o que quiser:
 | Campo | Descrição |
 |---|---|
 | `port` | Porta do painel (padrão 8090) |
-| ~~`refresh_seconds`~~ | Não é mais configurável: o poll da API é fixo em 5 min (veja abaixo) |
+| ~~`refresh_seconds`~~ | Não é mais configurável: o ritmo do poll é adaptativo (veja abaixo) |
 | `currency` | Moeda do excedente (ex.: `BRL`, `USD`) |
 | `credits_divisor` | Divisor dos créditos (a API costuma vir em centavos → 100) |
 | `intended_hours` | Horizonte padrão do veredito de troca |
@@ -207,7 +207,9 @@ Copie `config.example.json` para `config.json` e ajuste o que quiser:
 O limite de requisições vale para a **conta inteira** — cada sessão aberta do
 Claude Code soma no mesmo balde. Um intervalo curto no painel não traz
 informação nova (as janelas de uso se movem devagar) e ainda ajuda a estourar o
-limite. Por isso o poll é fixo em **5 minutos**, e quando vem um `429` o painel:
+limite. Por isso o poll tem **ritmo adaptativo** — 90s quando alguma janela passa de
+80% (a faixa em que 1 ponto muda decisão), 3 min entre 50–80% e 5 min com folga.
+E quando vem um `429` o painel:
 
 - **não** marca a conta como desconectada — o token continua válido, então pedir
   reconexão só geraria mais requisições e pioraria o problema;

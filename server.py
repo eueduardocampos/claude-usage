@@ -1,7 +1,8 @@
 """
 server.py — monta o estado do painel e serve o dashboard em localhost.
-Poller em thread separada chama a API de uso a cada refresh_seconds e grava
-snapshots; o servidor le sempre o ultimo snapshot do banco (desacoplado da rede).
+Poller em thread separada chama a API de uso em ritmo adaptativo (mais rapido
+perto do limite, mais lento com folga) e grava snapshots; o servidor le sempre o
+ultimo snapshot do banco, entao a interface nunca depende da rede.
 """
 
 import datetime as dt
@@ -51,7 +52,14 @@ class Ctx:
 # mesmo balde), entao um intervalo curto aqui derruba o painel sem ganhar
 # nada — as janelas de uso se movem devagar, e o contador de tokens ja
 # atualiza a cada 10s pelo scan dos logs locais, que nao gasta requisicao.
-POLL_SECONDS = 300           # 5 min entre leituras da API de uso
+# Ritmo adaptativo: o numero so precisa estar fresco quando muda decisao.
+# Perto do teto ele anda ~1 ponto/min em uso pesado, entao 5 min de defasagem
+# viram 5 pontos de erro — exatamente na hora de decidir se continua. Com folga,
+# a mesma defasagem nao muda nada e o que importa e poupar requisicao.
+POLL_HOT = 90                # >= 80% usado: leitura quase ao vivo
+POLL_WARM = 180              # 50-80%: ritmo intermediario
+POLL_COLD = 300              # < 50%: economiza requisicoes
+POLL_SECONDS = POLL_COLD     # ritmo de referencia / fallback
 BACKOFF_MAX_S = 1800         # teto do backoff quando toma 429 (30 min)
 MANUAL_MIN_INTERVAL_S = 60   # intervalo minimo entre "Atualizar" manuais
 
@@ -177,7 +185,7 @@ def build_state() -> dict:
         "history": history,
         "plan": plan,
         "semrush": semrush,
-        "config": {"refresh_seconds": POLL_SECONDS,
+        "config": {"refresh_seconds": _poll_interval(),
                    "intended_hours": cfg.get("intended_hours"),
                    "currency": cfg.get("currency"),
                    "usd_brl": cfg.get("usd_brl") or Ctx.fx_rate,
@@ -217,6 +225,21 @@ def detect_plan(profile):
     return None
 
 
+def _poll_interval():
+    """Escolhe o ritmo pelo pico de utilizacao do ultimo snapshot."""
+    try:
+        latest = Ctx.store.latest_state()
+        janelas = (latest or {}).get("windows") or {}
+        pico = max((w.get("utilization") or 0) for w in janelas.values()) if janelas else 0
+    except Exception:
+        pico = 0
+    if pico >= 80:
+        return POLL_HOT
+    if pico >= 50:
+        return POLL_WARM
+    return POLL_COLD
+
+
 def _schedule_backoff(retry_after=None):
     """Espera crescente depois de um 429, respeitando o Retry-After do servidor."""
     Ctx.rate_limit_hits += 1
@@ -253,7 +276,7 @@ def poll_once(log=print):
             Ctx.rate_limit_hits = 0
             Ctx.last_error = None
             Ctx.last_poll = time.time()
-            Ctx.next_poll_at = time.time() + POLL_SECONDS
+            Ctx.next_poll_at = time.time() + _poll_interval()
         except usage_api.RateLimited as e:
             # transitorio: preserva auth_connected e o ultimo snapshot bom
             espera = _schedule_backoff(e.retry_after)
@@ -397,13 +420,14 @@ class Handler(BaseHTTPRequestHandler):
             # pode virar um jeito de furar o rate limit da conta
             agora = time.time()
             espera = Ctx.next_poll_at - agora
-            recente = Ctx.last_poll and (agora - Ctx.last_poll) < MANUAL_MIN_INTERVAL_S
+            minimo = max(30, min(MANUAL_MIN_INTERVAL_S, _poll_interval() // 2))
+            recente = Ctx.last_poll and (agora - Ctx.last_poll) < minimo
             if Ctx.rate_limited and espera > 0:
                 self._send(200, json.dumps({
                     "ok": False, "reason": "rate_limited",
                     "retry_in": int(espera)}))
             elif recente:
-                restante = MANUAL_MIN_INTERVAL_S - (agora - Ctx.last_poll)
+                restante = minimo - (agora - Ctx.last_poll)
                 self._send(200, json.dumps({
                     "ok": False, "reason": "muito_recente",
                     "retry_in": int(restante)}))
