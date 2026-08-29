@@ -1,0 +1,262 @@
+<!-- Property inspector da acao "Consumo do Claude". -->
+<meta charset="utf-8" />
+<link rel="stylesheet" href="sdpi.css" />
+
+<div class="sdpi-wrapper">
+  <div class="sdpi-info">
+    Le o painel local <code>claude-usage</code>. Nao fala com a API da Anthropic e nao guarda
+    chave nenhuma — consultar o consumo nao gasta cota.
+  </div>
+
+  <!-- ---------------- camada 1: qual dado (por tecla) ---------------- -->
+  <div class="sdpi-heading">DADO</div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Metrica</div>
+    <select class="sdpi-item-value select" id="metric">
+      <optgroup label="Consumo">
+        <option value="auto">Automatico — a janela com menos folga</option>
+        <option value="both">As duas janelas na mesma tecla</option>
+        <option value="five_hour">Sessao (5h)</option>
+        <option value="seven_day">Semana (7d)</option>
+      </optgroup>
+      <optgroup label="Decisao">
+        <option value="eta_100">Quando estoura</option>
+        <option value="switch">Posso usar Opus?</option>
+      </optgroup>
+      <optgroup label="Custo">
+        <option value="cost_day">Custo de hoje</option>
+        <option value="cost_week">Custo da semana</option>
+        <option value="cost_month">Custo do mes</option>
+        <option value="cost_extra">Uso extra</option>
+      </optgroup>
+      <optgroup label="Contexto">
+        <option value="burn">Taxa de queima</option>
+      </optgroup>
+    </select>
+  </div>
+
+  <!-- ---------------- camada 2: como desenha (por tecla) ---------------- -->
+  <div class="sdpi-heading">DESENHO</div>
+
+  <div class="sdpi-item" id="row-mode">
+    <div class="sdpi-item-label">Estilo</div>
+    <select class="sdpi-item-value select" id="mode">
+      <option value="ring">Anel + numero</option>
+      <option value="bar">Numero + barra</option>
+    </select>
+  </div>
+
+  <div class="sdpi-item" id="row-hist">
+    <div class="sdpi-item-label">Historico</div>
+    <select class="sdpi-item-value select" id="histStyle">
+      <option value="off">Desligado</option>
+      <option value="sparkline">Sparkline</option>
+      <option value="minibars">Mini-barras</option>
+      <option value="area">Area</option>
+    </select>
+  </div>
+
+  <div class="sdpi-item" id="aviso-modo" style="display: none">
+    <div class="sdpi-item-label"></div>
+    <div class="sdpi-item-value">
+      <small>Esta metrica nao tem percentual, entao a tecla usa numero + rotulo.</small>
+    </div>
+  </div>
+
+  <!-- ---------------- camada 3: global ---------------- -->
+  <div class="sdpi-heading">GLOBAL (vale para todas as teclas)</div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Painel</div>
+    <input class="sdpi-item-value" id="panelUrl" placeholder="http://127.0.0.1:8090" />
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Atualizar (s)</div>
+    <input class="sdpi-item-value" id="refreshSeconds" type="number" min="2" max="300" value="10" />
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Mostrar</div>
+    <select class="sdpi-item-value select" id="percent">
+      <option value="used">Percentual usado</option>
+      <option value="remaining">Percentual restante</option>
+    </select>
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Tempo pro reset</div>
+    <input class="sdpi-item-value" id="showResetTime" type="checkbox" checked />
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Piscar no critico</div>
+    <input class="sdpi-item-value" id="flicker" type="checkbox" />
+  </div>
+
+  <div class="sdpi-heading">LIMIARES</div>
+
+  <div class="sdpi-item" id="aviso-limiar">
+    <div class="sdpi-item-label"></div>
+    <div class="sdpi-item-value"><small id="aviso-limiar-txt"></small></div>
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Amarelo</div>
+    <input class="sdpi-item-value" id="yellow" type="number" min="0" max="200" />
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Vermelho</div>
+    <input class="sdpi-item-value" id="red" type="number" min="0" max="200" />
+  </div>
+
+  <div class="sdpi-item">
+    <div class="sdpi-item-label">Critico</div>
+    <input class="sdpi-item-value" id="critical" type="number" min="0" max="200" />
+  </div>
+
+  <details class="sdpi-item">
+    <summary>A tecla esta mostrando "OFF" ou "--"?</summary>
+    <p>
+      <b>OFF</b>: o painel <code>claude-usage</code> nao esta rodando. Inicie-o
+      (<code>python main.py</code>, ou <code>iniciar-painel.bat</code> no Windows).
+    </p>
+    <p>
+      <b>--</b> com "reconectar": a conta perdeu o token. Rode
+      <code>python auth.py login</code> (ou <code>reconectar-conta.bat</code>).
+    </p>
+    <p>Um <b>!</b> depois do numero significa dado antigo, de antes da conta desconectar.</p>
+  </details>
+</div>
+
+<script>
+  let uuid, actionInfo, ws;
+
+  const POR_TECLA = ["metric", "mode", "histStyle"];
+  const GLOBAIS = ["panelUrl", "refreshSeconds", "percent", "yellow", "red", "critical", "flicker", "showResetTime"];
+
+  // Metricas sem percentual: nao aceitam anel/barra nem historico.
+  const SEM_PERCENTUAL = ["eta_100", "switch", "cost_day", "cost_week", "cost_month", "cost_extra", "burn"];
+
+  // Limiares padrao por polaridade — trocam junto com ela.
+  const PADRAO = {
+    used: { yellow: 80, red: 100, critical: 110 },
+    remaining: { yellow: 50, red: 20, critical: 10 },
+  };
+
+  let ultimaPolaridade = "used";
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEvent, info, actionInfoJson) {
+    uuid = propertyInspectorUUID;
+    actionInfo = JSON.parse(actionInfoJson);
+
+    ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ event: registerEvent, uuid }));
+      ws.send(JSON.stringify({ event: "getGlobalSettings", context: uuid }));
+      preencherTecla(actionInfo.payload.settings || {});
+    };
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.event === "didReceiveSettings") preencherTecla(msg.payload.settings || {});
+      if (msg.event === "didReceiveGlobalSettings") preencherGlobal(msg.payload.settings || {});
+    };
+  }
+
+  function preencherTecla(s) {
+    el("metric").value = s.metric || "auto";
+    el("mode").value = s.mode || "ring";
+    el("histStyle").value = s.histStyle || "off";
+    atualizarVisibilidade();
+  }
+
+  function preencherGlobal(s) {
+    const pol = s.percent === "remaining" ? "remaining" : "used";
+    ultimaPolaridade = pol;
+    const p = PADRAO[pol];
+
+    el("panelUrl").value = s.panelUrl || "http://127.0.0.1:8090";
+    el("refreshSeconds").value = s.refreshSeconds || 10;
+    el("percent").value = pol;
+    el("yellow").value = s.yellow != null ? s.yellow : p.yellow;
+    el("red").value = s.red != null ? s.red : p.red;
+    el("critical").value = s.critical != null ? s.critical : p.critical;
+    el("flicker").checked = !!s.flicker;
+    el("showResetTime").checked = s.showResetTime !== false;
+    atualizarAvisoLimiar();
+  }
+
+  /** Esconde o que nao se aplica em vez de oferecer combinacao que nao existe. */
+  function atualizarVisibilidade() {
+    const m = el("metric").value;
+    const semPct = SEM_PERCENTUAL.includes(m);
+    const ehDual = m === "both";
+
+    el("row-mode").style.display = semPct || ehDual ? "none" : "";
+    el("row-hist").style.display = semPct || ehDual ? "none" : "";
+    el("aviso-modo").style.display = semPct ? "" : "none";
+  }
+
+  /**
+   * O aviso existe porque a inversao e o erro mais facil de cometer: com "restante",
+   * o alerta dispara quando o numero CAI, nao quando sobe.
+   */
+  function atualizarAvisoLimiar() {
+    const pol = el("percent").value;
+    el("aviso-limiar-txt").textContent =
+      pol === "remaining"
+        ? "Alerta quando o restante CAI abaixo do valor. Amarelo deve ser MAIOR que vermelho."
+        : "Alerta quando o usado SOBE acima do valor. Amarelo deve ser MENOR que vermelho.";
+  }
+
+  /** Trocar a polaridade reescreve os limiares, senao a tecla fica verde na hora errada. */
+  function aoTrocarPolaridade() {
+    const pol = el("percent").value;
+    if (pol !== ultimaPolaridade) {
+      const p = PADRAO[pol];
+      el("yellow").value = p.yellow;
+      el("red").value = p.red;
+      el("critical").value = p.critical;
+      ultimaPolaridade = pol;
+    }
+    atualizarAvisoLimiar();
+  }
+
+  function salvarTecla() {
+    atualizarVisibilidade();
+    const settings = {
+      metric: el("metric").value,
+      mode: el("mode").value,
+      histStyle: el("histStyle").value,
+    };
+    ws.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+  }
+
+  function salvarGlobal() {
+    const settings = {
+      panelUrl: el("panelUrl").value.trim() || "http://127.0.0.1:8090",
+      refreshSeconds: Number(el("refreshSeconds").value) || 10,
+      percent: el("percent").value,
+      yellow: Number(el("yellow").value),
+      red: Number(el("red").value),
+      critical: Number(el("critical").value),
+      flicker: el("flicker").checked,
+      showResetTime: el("showResetTime").checked,
+    };
+    ws.send(JSON.stringify({ event: "setGlobalSettings", context: uuid, payload: settings }));
+  }
+
+  for (const id of POR_TECLA) el(id).addEventListener("change", salvarTecla);
+  for (const id of GLOBAIS) {
+    el(id).addEventListener("change", () => {
+      if (id === "percent") aoTrocarPolaridade();
+      salvarGlobal();
+    });
+  }
+</script>

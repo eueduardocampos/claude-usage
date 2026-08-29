@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="sdpi.css" />
+  <style>
+    body { font-family: -apple-system, 'Segoe UI', sans-serif; margin: 0; padding: 8px; color: #d8d8d8; background: transparent; font-size: 13px; }
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .row label { min-width: 110px; font-size: 12px; color: #969696; }
+    input[type=text], input[type=number], select {
+      flex: 1; background: #2d2d2d; color: #d8d8d8; border: 1px solid #3d3d3d;
+      border-radius: 4px; padding: 5px 8px; font-size: 13px;
+    }
+    input[type=checkbox] { transform: scale(1.1); }
+    .hint { font-size: 11px; color: #6e6e6e; margin: 4px 0 12px; line-height: 1.4; }
+    .thresholds { display: flex; gap: 6px; flex: 1; }
+    .thresholds input { width: 52px; flex: none; }
+  </style>
+</head>
+<body>
+  <div class="hint">Configuração global — vale para todas as teclas e dials do Claude Usage.</div>
+
+  <div class="row">
+    <label for="panelUrl">URL do painel</label>
+    <input type="text" id="panelUrl" placeholder="http://127.0.0.1:8090" />
+  </div>
+  <div class="row">
+    <label for="refreshSeconds">Atualizar a cada (s)</label>
+    <input type="number" id="refreshSeconds" min="2" placeholder="10" />
+  </div>
+  <div class="row">
+    <label for="percent">Percentual</label>
+    <select id="percent">
+      <option value="used">usado (sobe até 100%)</option>
+      <option value="remaining">restante (cai até 0%)</option>
+    </select>
+  </div>
+  <div class="row">
+    <label>Limiares (am/vm/crít)</label>
+    <div class="thresholds">
+      <input type="number" id="yellow" />
+      <input type="number" id="red" />
+      <input type="number" id="critical" />
+    </div>
+  </div>
+  <div class="row">
+    <label for="flicker">Piscar no crítico</label>
+    <input type="checkbox" id="flicker" />
+  </div>
+  <div class="row">
+    <label for="showResetTime">Mostrar reset</label>
+    <input type="checkbox" id="showResetTime" checked />
+  </div>
+  <div class="hint">O painel precisa estar rodando (<code>python main.py</code>). Ao trocar a polaridade, ajuste os limiares: em "restante" o alerta dispara quando o número CAI abaixo deles.</div>
+
+  <script>
+    let ws = null;
+    let pluginUUID = null;
+    let settings = {};
+
+    const FIELDS = ["panelUrl", "refreshSeconds", "percent", "yellow", "red", "critical", "flicker", "showResetTime"];
+
+    function fill() {
+      for (const f of FIELDS) {
+        const el = document.getElementById(f);
+        if (!el) continue;
+        if (el.type === "checkbox") el.checked = f === "showResetTime" ? settings[f] !== false : !!settings[f];
+        else if (settings[f] !== undefined && settings[f] !== null) el.value = settings[f];
+      }
+    }
+
+    function collect() {
+      const out = {};
+      for (const f of FIELDS) {
+        const el = document.getElementById(f);
+        if (!el) continue;
+        if (el.type === "checkbox") out[f] = el.checked;
+        else if (el.type === "number") out[f] = el.value === "" ? undefined : Number(el.value);
+        else out[f] = el.value || undefined;
+      }
+      return out;
+    }
+
+    function save() {
+      settings = { ...settings, ...collect() };
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ event: "setGlobalSettings", context: pluginUUID, payload: settings }));
+      }
+    }
+
+    for (const f of FIELDS) {
+      const el = document.getElementById(f);
+      if (el) el.addEventListener("change", save);
+    }
+
+    // eslint-disable-next-line no-unused-vars
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+      pluginUUID = inUUID;
+      ws = new WebSocket("ws://127.0.0.1:" + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+        ws.send(JSON.stringify({ event: "getGlobalSettings", context: inUUID }));
+      };
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.event === "didReceiveGlobalSettings") {
+            settings = (msg.payload && msg.payload.settings) || {};
+            fill();
+          }
+        } catch { /* ignora */ }
+      };
+    }
+  </script>
+</body>
+</html>

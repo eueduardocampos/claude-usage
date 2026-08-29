@@ -1,0 +1,183 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Name": "Claude Usage",
+  "UUID": "digital.astronauta.claudeusage",
+  "Version": "3.0.0.0",
+  "Author": "Eduardo Campos / Astronauta",
+  "Description": "Consumo do Claude Code no Stream Deck: janelas de uso, fonte dos tokens (licenca vs extras), custo, balanco da licenca e recomendacao de modelo. Requer o painel claude-usage rodando em localhost.",
+  "Category": "Claude Usage",
+  "CategoryIcon": "imgs/category",
+  "Icon": "imgs/icon",
+  "URL": "https://github.com/eueduardocampos/claude-usage",
+  "SDKVersion": 2,
+  "CodePath": "bin/plugin.js",
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Software": {
+    "MinimumVersion": "6.5"
+  },
+  "OS": [
+    { "Platform": "windows", "MinimumVersion": "10" },
+    { "Platform": "mac", "MinimumVersion": "12" }
+  ],
+  "Actions": [
+    {
+      "Name": "Janela crítica",
+      "UUID": "digital.astronauta.claudeusage.auto",
+      "Icon": "imgs/a-auto",
+      "Tooltip": "A janela de uso com menos folga no momento (5h ou 7d). Pressione para abrir o painel.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Sessão 5h + Semana 7d",
+      "UUID": "digital.astronauta.claudeusage.dualwin",
+      "Icon": "imgs/a-dual",
+      "Tooltip": "As duas janelas empilhadas na mesma tecla, com barra e tempo pro reset.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Fonte dos tokens",
+      "UUID": "digital.astronauta.claudeusage.source",
+      "Icon": "imgs/a-source",
+      "Tooltip": "LICENCA (verde) ou EXTRAS (vermelho) — se o que voce roda agora esta sendo cobrado a parte.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Estouro",
+      "UUID": "digital.astronauta.claudeusage.eta",
+      "Icon": "imgs/a-eta",
+      "Tooltip": "OK, ou a hora em que a janela estoura (so quando o estouro cai antes do reset).",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Trocar de modelo?",
+      "UUID": "digital.astronauta.claudeusage.switch",
+      "Icon": "imgs/a-switch",
+      "Tooltip": "Veredito de troca: da pra usar Opus agora ou vai estourar antes do reset?",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Custo hoje",
+      "UUID": "digital.astronauta.claudeusage.costday",
+      "Icon": "imgs/a-cost",
+      "Tooltip": "Custo estimado do dia em R$ (preco de tabela da API).",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Balanço do mês",
+      "UUID": "digital.astronauta.claudeusage.balance",
+      "Icon": "imgs/a-balance",
+      "Tooltip": "Alavancagem da licenca: consumo equivalente dividido pelo que voce paga (licenca + extras).",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Queima agora",
+      "UUID": "digital.astronauta.claudeusage.burn",
+      "Icon": "imgs/a-burn",
+      "Tooltip": "Tokens/h do modelo dominante — vira R$/h vermelho quando esta queimando creditos extras.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    },
+    {
+      "Name": "Dial · Horizonte",
+      "UUID": "digital.astronauta.claudeusage.dialhorizon",
+      "Icon": "imgs/a-horizon",
+      "Tooltip": "Gire para ajustar o 'pretendo trabalhar mais' (30m a 4h) — o veredito recalcula na hora.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Ajustar horizonte",
+          "Push": "Abrir o painel",
+          "Touch": "Atualizar agora"
+        }
+      },
+      "States": [{ "Image": "imgs/key" }]
+    },
+    {
+      "Name": "Dial · Janelas",
+      "UUID": "digital.astronauta.claudeusage.dialwindows",
+      "Icon": "imgs/a-windows",
+      "Tooltip": "Gire para alternar 5h / 7d. Valor = usado, barra = projetado.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Alternar janela",
+          "Push": "Abrir o painel",
+          "Touch": "Atualizar agora"
+        }
+      },
+      "States": [{ "Image": "imgs/key" }]
+    },
+    {
+      "Name": "Dial · Custos",
+      "UUID": "digital.astronauta.claudeusage.dialcosts",
+      "Icon": "imgs/a-costs",
+      "Tooltip": "Gire para alternar hoje / semana / mes / extras.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Alternar escopo",
+          "Push": "Abrir o painel",
+          "Touch": "Atualizar agora"
+        }
+      },
+      "States": [{ "Image": "imgs/key" }]
+    },
+    {
+      "Name": "Dial · Vida toda",
+      "UUID": "digital.astronauta.claudeusage.diallife",
+      "Icon": "imgs/a-life",
+      "Tooltip": "Gire para alternar tokens totais / custo total / interacoes.",
+      "PropertyInspectorPath": "ui/global.html",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Alternar metrica",
+          "Push": "Abrir o painel",
+          "Touch": "Atualizar agora"
+        }
+      },
+      "States": [{ "Image": "imgs/key" }]
+    },
+    {
+      "Name": "Consumo (configurável)",
+      "UUID": "digital.astronauta.claudeusage.window",
+      "Icon": "imgs/action",
+      "Tooltip": "Acao generica: escolha a metrica no inspector. Mantida por compatibilidade com perfis antigos.",
+      "PropertyInspectorPath": "ui/window.html",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Alternar janela",
+          "Push": "Abrir o painel",
+          "Touch": "Abrir o painel"
+        }
+      },
+      "States": [{ "Image": "imgs/key", "TitleAlignment": "bottom" }]
+    }
+  ]
+}

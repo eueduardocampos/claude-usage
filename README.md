@@ -140,6 +140,15 @@ quadrado (≥ 1024px) e rode, dentro de `desktop/`:
 npx @tauri-apps/cli icon caminho/para/arte.png
 ```
 
+## Stream Deck
+
+Plugin oficial para Elgato Stream Deck (Windows/macOS): 8 teclas dedicadas
+(janela crítica, 5h+7d, fonte dos tokens, estouro, modelo, custo, balanço da
+licença, queima) e 4 dials para o Stream Deck + (horizonte, janelas, custos,
+vida toda). Instalação com dois cliques pelo `.streamDeckPlugin` do
+[release](https://github.com/eueduardocampos/claude-usage/releases), com perfil
+pronto para importar. Detalhes em [`streamdeck/`](streamdeck/README.md).
+
 ### iOS
 
 Uma versão para **iPhone/iPad** está no radar para o futuro. O backend e a

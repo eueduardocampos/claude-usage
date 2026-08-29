@@ -24,3 +24,6 @@ dist-release/
 # Logs e utilitarios locais da maquina
 *.log
 manter-painel-online.ps1
+
+# Pacote do plugin de Stream Deck e gerado no CI
+*.streamDeckPlugin
