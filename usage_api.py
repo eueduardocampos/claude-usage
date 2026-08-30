@@ -8,6 +8,8 @@ Janelas retornadas: five_hour, seven_day, seven_day_sonnet, seven_day_opus,
 seven_day_omelette (design) e extra_usage (creditos/excedente).
 """
 
+from __future__ import annotations
+
 import json
 import urllib.request
 import urllib.error

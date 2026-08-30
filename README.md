@@ -46,7 +46,8 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 
 Para **rodar** (a interface já vem compilada em `web/dist`):
 
-- **Python 3.8+** (só biblioteca padrão).
+- **Python 3.9+** (só biblioteca padrão). O macOS já traz 3.9 de fábrica, então
+  serve sem instalar nada.
 - **Claude Code** já autenticado na máquina (CLI ou app).
 - Conexão com internet (para a API de uso da conta).
 
@@ -57,7 +58,7 @@ Para **desenvolver a interface** (opcional): **Node.js 18+**.
 ```bash
 git clone https://github.com/eueduardocampos/claude-usage
 cd claude-usage
-python main.py
+python main.py     # macOS/Linux: python3 main.py
 ```
 
 Por padrão, o painel sobe em **http://localhost:8090** e abre sozinho no navegador.
@@ -70,7 +71,14 @@ Dois detalhes importantes:
 - A porta (`8090`) e o abrir-sozinho são configuráveis em `config.json`
   (`port` e `open_browser`). Se a porta já estiver em uso, troque por outra.
 
-No Windows você também pode dar dois cliques em `iniciar-painel.bat`.
+Você também pode dar dois cliques num lançador, sem abrir terminal:
+`iniciar-painel.bat` no Windows, `iniciar-painel.command` no macOS. Para
+reconectar a conta, os equivalentes são `reconectar-conta.bat` /
+`reconectar-conta.command`.
+
+> 🍎 No macOS, o Gatekeeper barra o primeiro duplo-clique num `.command` baixado
+> da internet. Libere com **botão direito → Abrir** uma vez, ou rode
+> `xattr -d com.apple.quarantine iniciar-painel.command`.
 
 > 💾 O banco local (`painel.db`) fica em `%LOCALAPPDATA%\claude-usage\` no Windows
 > (ou `~/.local/share/claude-usage/` no macOS/Linux) e é migrado automaticamente

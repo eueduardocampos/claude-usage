@@ -14,6 +14,7 @@ compilador nenhum, ao contrario do app Tauri.
 import ctypes
 import io
 import json
+import sys
 import threading
 import time
 import urllib.error
@@ -27,8 +28,15 @@ DEFAULT_REFRESH_SECONDS = 5
 MIN_REFRESH_SECONDS = 5
 ICON_SIZE = 64
 FONT_CANDIDATES = [
+    # Windows
     "C:\\Windows\\Fonts\\segoeuib.ttf",
     "C:\\Windows\\Fonts\\arialbd.ttf",
+    # macOS
+    "/System/Library/Fonts/SFNSDisplay.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    # Linux
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 ]
 
 STATUS_COLOR = {
@@ -144,7 +152,14 @@ def _patch_pystray_small_icon_size():
     Corrige carregando direto no tamanho pequeno via GetSystemMetrics,
     sem LR_DEFAULTSIZE -- o Windows entao usa o frame de 16px ja
     embutido no ICO (o Pillow gera varios tamanhos automaticamente ao
-    salvar), sem nenhum stretch depois."""
+    salvar), sem nenhum stretch depois.
+
+    Fora do Windows nao ha o que corrigir: o backend do pystray e outro
+    (AppKit no macOS, GTK/AppIndicator no Linux) e `ctypes.windll` nem
+    existe. Sai sem fazer nada, em vez de derrubar a bandeja inteira."""
+    if sys.platform != "win32":
+        return
+
     import pystray._win32 as _w32mod
 
     win32 = _w32mod.win32
