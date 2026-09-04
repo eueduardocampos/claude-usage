@@ -285,7 +285,10 @@ function VerdictPanel({ sw, intendedHours, dominant, onChangeHours }) {
   );
 }
 
-function LiveTotal({ total, today, burn, dominant, fx }) {
+function LiveTotal({ total, today, burn, burnModels, dominant, fx }) {
+  // a queima soma todos os modelos, entao a legenda avisa quando ha mais de um
+  const lead = modelShort(dominant);
+  const burnLegend = lead && burnModels > 1 ? `${lead} +${burnModels - 1}` : lead;
   const tokens = useAnimated(total?.total_tokens, 900);
   return (
     <Card className="flex h-full flex-col justify-between gap-4">
@@ -319,7 +322,7 @@ function LiveTotal({ total, today, burn, dominant, fx }) {
             {burn ? `${fmtTokens(burn)}/h` : '—'}
           </div>
           <div className="mc-num text-[12px]" style={{ color: C.muted }}>
-            {modelShort(dominant) || '—'}
+            {burnLegend || '—'}
           </div>
         </div>
       </div>
@@ -870,7 +873,9 @@ export default function Dashboard() {
   const fx = state?.config?.usd_brl || null;
   const winKeys = ['five_hour', 'seven_day', 'seven_day_sonnet'].filter((k) => windows[k]);
   const burnMap = state?.burn_tokph || {};
-  const dominantBurn = state?.dominant_model ? burnMap[state.dominant_model] : null;
+  // queima agora = soma de todos os modelos, nao so a do dominante
+  const totalBurn = Object.values(burnMap).reduce((a, b) => a + b, 0) || null;
+  const burnModels = Object.values(burnMap).filter((v) => v > 0).length;
   const heatmap = history?.heatmap || [];
 
   return (
@@ -899,7 +904,8 @@ export default function Dashboard() {
             <LiveTotal
               total={total}
               today={state?.history?.dia}
-              burn={dominantBurn}
+              burn={totalBurn}
+              burnModels={burnModels}
               dominant={state?.dominant_model}
               fx={fx}
             />
