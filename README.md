@@ -1,10 +1,30 @@
-# Painel de Consumo do Claude
+# Painel de Consumo de IA
 
-Um painel local que mostra, em um só lugar, **quanto você já consumiu** no Claude
-Code e **se é seguro continuar / trocar de modelo agora** — ou se você corre o
-risco de bater o limite no meio de um projeto.
+Um painel local que acompanha separadamente a assinatura Claude e a assinatura
+ChatGPT usada pelo Codex. No Claude, ele também mostra **se é seguro continuar /
+trocar de modelo agora** — ou se você corre o risco de bater o limite no meio de
+um projeto.
 
-![Painel de Consumo do Claude](docs/painel.png)
+## Sobre
+
+Claude e Codex no mesmo painel: cotas em uso no topo, tokens separados por
+plataforma, ritmo por modelo e comparação do consumo com o custo das assinaturas.
+No Stream Deck +, o perfil **Consumo de IA** reúne oito teclas e quatro dials
+com números grandes, rótulos curtos e cores consistentes.
+
+![Painel unificado com cotas Claude e Codex, tokens e retorno das assinaturas](docs/painel.png)
+
+*Interface atual com dados demonstrativos. Cada instalação consulta suas próprias contas.*
+
+![Comparativo de consumo e heatmap das duas plataformas](docs/comparativo.png)
+
+*Claude em laranja e Codex em verde, na mesma escala de tokens.*
+
+![Perfil Consumo de IA para Stream Deck Plus](docs/streamdeck.png)
+
+*Prévia renderizada das oito teclas e quatro dials; valores demonstrativos.*
+
+## Fontes de dados
 
 Ele junta duas fontes:
 
@@ -15,10 +35,33 @@ Ele junta duas fontes:
    da **semana (7d)** e do bucket de **Sonnet (7d)**, horários de reset e créditos
    de excedente.
 
+Quando o Codex Desktop ou CLI está instalado, o painel também cria uma área
+integrada para a **assinatura ChatGPT usada pelo Codex**. Os tokens são lidos de
+`~/.codex/sessions`. A cota é consultada a cada cinco minutos usando o OAuth
+existente em `~/.codex/auth.json`, sem copiar ou renovar credenciais. Snapshots
+são guardados na tabela `codex_limits` do banco local por 90 dias.
+
+O dashboard compara as plataformas com cores consistentes (Claude laranja,
+ChatGPT verde), ritmo por modelo, cotas, histórico e equivalência de API.
+A mensalidade é configurável, assim como compras extras no mês. Créditos não
+são convertidos automaticamente em dinheiro. O cálculo de equivalência usa
+preços padrão de texto verificados em 05/09/2026 e separa modelos sem preço.
+Raciocínio já está incluído na saída; cache lido é cobrado separadamente da
+entrada nova. Ferramentas, Fast e cache writes não registrados são excluídos.
+Projeções de cota exigem 30 minutos na mesma janela; projeções financeiras
+exigem três dias observados. Não há inferência de capacidade total por tokens.
+
+Chat comum, imagens, voz e uploads não entram nesta medição.
+
+Sessões importadas do Claude para o Codex são reconhecidas por
+`~/.codex/external_agent_session_imports.json`. O histórico importado continua
+contabilizado no Claude; se a conversa for retomada no Codex, apenas as novas
+chamadas OpenAI entram na área ChatGPT.
+
 Com isso, mostra um **semáforo por janela** e um **veredito direto**: *"dá pra
 trocar pra Opus agora ou vou estourar antes de terminar?"*.
 
-> ⚠️ **Projeto não-oficial.** Não tem relação com a Anthropic. Ele lê um endpoint
+> ⚠️ **Projeto não-oficial.** Não tem relação com a Anthropic, a OpenAI ou a Elgato. Ele lê um endpoint
 > de uso que não é documentado publicamente e pode mudar a qualquer momento.
 > Use por sua conta e risco.
 
@@ -32,9 +75,9 @@ trocar pra Opus agora ou vou estourar antes de terminar?"*.
 - 🤖 **Veredito de troca de modelo** combinando limite ao vivo + ritmo dos logs.
 - 📊 Gráficos de tokens por dia, perfil por hora do dia e evolução das janelas.
 - ⏱️ **Ritmo adaptativo e seguro**: lê a API a cada 90s perto do limite e a cada 5 min com folga, com backoff em `429` e sem tratar limite de requisição como desconexão.
-- 🍎 **Interface no estilo iOS** feita com [Konsta UI](https://konstaui.com) + Tailwind CSS v4.
+- 🖥️ **Interface unificada e responsiva**: cotas ativas em uma faixa, janelas zeradas recolhidas e cores por plataforma.
 - 🪟 **Widget flutuante nativo** para macOS, Windows e Linux (sempre no topo) — veja [App de desktop](#app-de-desktop-macos-windows-e-linux).
-- 🔒 Roda 100% local; nenhum dado sai da sua máquina.
+- 🔒 Histórico armazenado localmente; consultas autenticadas vão aos serviços de cada conta.
 
 ## Stack
 
@@ -48,7 +91,7 @@ Para **rodar** (a interface já vem compilada em `web/dist`):
 
 - **Python 3.9+** (só biblioteca padrão). O macOS já traz 3.9 de fábrica, então
   serve sem instalar nada.
-- **Claude Code** já autenticado na máquina (CLI ou app).
+- **Claude Code e/ou Codex** já autenticados na máquina (CLI ou app).
 - Conexão com internet (para a API de uso da conta).
 
 Para **desenvolver a interface** (opcional): **Node.js 18+**.
@@ -150,12 +193,13 @@ npx @tauri-apps/cli icon caminho/para/arte.png
 
 ## Stream Deck
 
-Plugin oficial para Elgato Stream Deck (Windows/macOS): 8 teclas dedicadas
-(janela crítica, 5h+7d, fonte dos tokens, estouro, modelo, custo, balanço da
-licença, queima) e 4 dials para o Stream Deck + (horizonte, janelas, custos,
-vida toda). Instalação com dois cliques pelo `.streamDeckPlugin` do
-[release](https://github.com/eueduardocampos/claude-usage/releases), com perfil
-pronto para importar. Detalhes em [`streamdeck/`](streamdeck/README.md).
+O plugin **AI Usage 4.1** acompanha Claude e Codex com o perfil diário
+**Consumo de IA** para Stream Deck +. Cotas e cobrança na primeira linha;
+ritmo e retorno mensal na segunda. Os dials alternam janelas, modelos,
+equivalência de API e totais. As ações e os perfis anteriores continuam disponíveis.
+
+Baixe o [perfil Consumo de IA](streamdeck/Consumo%20de%20IA.streamDeckProfile)
+e siga a [instalação do plugin](streamdeck/README.md#instalar).
 
 ### iOS
 

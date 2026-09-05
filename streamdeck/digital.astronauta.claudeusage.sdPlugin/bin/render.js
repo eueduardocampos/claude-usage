@@ -143,8 +143,8 @@ const GRAPH_STYLES = new Set(["line", "bargraph", "background"]);
 // ---------------------------------------------------------------- modos
 
 /** Anel + numero grande. Para metricas percentuais. */
-function ring({ label, value, sub, level, pct, hist, histStyle }) {
-  const color = colorForLevel(level);
+function ring({ label, value, sub, level, pct, hist, histStyle, accent }) {
+  const color = level === "safe" && accent ? accent : colorForLevel(level);
   const R = 52;
   const CIRC = 2 * Math.PI * R;
   const dash = pct === null || pct === undefined ? 0 : CIRC * (Math.max(0, Math.min(100, pct)) / 100);
@@ -154,7 +154,7 @@ function ring({ label, value, sub, level, pct, hist, histStyle }) {
     return svg(
       historyLayer(hist, histStyle, color) +
         txt(K / 2, 52, value, { size: fitSize(value, 40), weight: "bold", fill: color }) +
-        txt(K / 2, 72, label, { size: 15, fill: COLORS.offline }) +
+        txt(K / 2, 72, label, { size: Math.min(15, 130 / Math.max(1,String(sub).length) * 1.6), fill: COLORS.offline }) +
         (sub ? txt(K / 2, K - 8, sub, { size: 14, fill: COLORS.offline }) : "")
     );
   }
@@ -168,13 +168,13 @@ function ring({ label, value, sub, level, pct, hist, histStyle }) {
   </g>` +
       txt(K / 2, 26, label, { size: 17, fill: COLORS.offline }) +
       txt(K / 2, 82, value, { size: fitSize(value), weight: "bold" }) +
-      (sub ? txt(K / 2, 108, sub, { size: 15, fill: COLORS.offline }) : "")
+      (sub ? txt(K / 2, 108, sub, { size: Math.min(15, 130 / Math.max(1,String(sub).length) * 1.6), fill: COLORS.offline }) : "")
   );
 }
 
 /** Numero grande + barra horizontal. */
-function bar({ label, value, sub, level, pct, hist, histStyle }) {
-  const color = colorForLevel(level);
+function bar({ label, value, sub, level, pct, hist, histStyle, accent }) {
+  const color = level === "safe" && accent ? accent : colorForLevel(level);
   const w = 108;
   const filled = pct === null || pct === undefined ? 0 : (Math.max(0, Math.min(100, pct)) / 100) * w;
 
@@ -184,7 +184,7 @@ function bar({ label, value, sub, level, pct, hist, histStyle }) {
       txt(K / 2, 78, value, { size: fitSize(value), weight: "bold" }) +
       `<rect x="18" y="92" width="${w}" height="12" rx="6" fill="${COLORS.track}"/>` +
       (filled > 0 ? `<rect x="18" y="92" width="${filled.toFixed(1)}" height="12" rx="6" fill="${color}"/>` : "") +
-      (sub ? txt(K / 2, 124, sub, { size: 15, fill: COLORS.offline }) : "")
+      (sub ? txt(K / 2, 124, sub, { size: Math.min(15, 130 / Math.max(1,String(sub).length) * 1.6), fill: COLORS.offline }) : "")
   );
 }
 
@@ -209,19 +209,46 @@ function dual({ rows }) {
 }
 
 /** Numero/texto + rotulo. Para metricas sem percentual (custo, horario, veredito). */
-function plain({ label, value, sub, level, hist, histStyle }) {
-  const color = colorForLevel(level);
+function plain({ label, value, sub, level, hist, histStyle, accent }) {
+  const color = level === "safe" && accent ? accent : colorForLevel(level);
   return svg(
     historyLayer(hist, histStyle, color) +
-      txt(K / 2, 34, label, { size: 18, fill: COLORS.offline }) +
+      txt(K / 2, 34, label, { size: Math.min(18, 130 / Math.max(1,String(label).length) * 1.6), fill: COLORS.offline }) +
       txt(K / 2, 88, value, { size: fitSize(value, 40), weight: "bold", fill: color }) +
-      (sub ? txt(K / 2, 118, sub, { size: 15, fill: COLORS.offline }) : "")
+      (sub ? txt(K / 2, 118, sub, { size: Math.min(15, 130 / Math.max(1,String(sub).length) * 1.6), fill: COLORS.offline }) : "")
   );
 }
 
 /** Tecla apagada — usada pelo flicker no estado critico. */
 function blank(level) {
   return svg(txt(K / 2, K / 2 + 6, "", {}), level === "critical" ? "#2a0a12" : COLORS.bg);
+}
+
+/** Legibility-first: fixed non-overlapping zones, one number per surface. */
+function clean(view, dial = false) {
+  const {label = '', value = '--', sub = '', level, accent, pct} = view;
+  const color = level === 'safe' ? accent || '#ef985d' : colorForLevel(level);
+  const width = dial ? 200 : 144;
+  const height = dial ? 100 : 144;
+  const font = (text, max, available) => Math.min(max, available / Math.max(1,String(text).length) * 1.65);
+  const heading = label.replace(' /H','').replace(' ROI','').replace(' · TOKENS',' TOTAL');
+  const detail = sub.replace('tokens/h · 2h','tokens / hora').replace('API / gasto','retorno mensal').replace('sem extras inform.','retorno parcial');
+  let content = `<rect width="${width}" height="${height}" fill="#10151c"/>`;
+  if (dial) {
+    content += txt(12,22,heading,{anchor:'start',size:font(heading,16,176),fill:color,weight:'bold'});
+    content += txt(12,62,value,{anchor:'start',size:font(value,34,176),weight:'bold'});
+    content += txt(12,86,detail,{anchor:'start',size:font(detail,13,176),fill:'#acb8c8'});
+  } else {
+    content += `<rect x="12" y="8" width="120" height="4" rx="2" fill="${color}"/>`;
+    content += txt(72,34,heading,{size:font(heading,16,122),fill:color,weight:'bold'});
+    content += txt(72,88,value,{size:font(value,44,122),weight:'bold'});
+    content += txt(72,113,detail,{size:font(detail,14,122),fill:'#acb8c8'});
+  }
+  if (typeof pct === 'number') {
+    const y=dial?96:130;
+    content += `<rect x="12" y="${y}" width="${width-24}" height="4" rx="2" fill="#303a47"/><rect x="12" y="${y}" width="${(width-24)*Math.max(0,Math.min(100,pct))/100}" height="4" rx="2" fill="${color}"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${content}</svg>`;
 }
 
 /** Ponto unico de entrada: escolhe o desenho pelo `mode`. */
@@ -245,6 +272,7 @@ function toDataUri(svgString) {
 }
 
 module.exports = {
+  clean,
   COLORS,
   colorForLevel,
   escapeXml,
